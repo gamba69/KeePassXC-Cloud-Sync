@@ -122,7 +122,7 @@ jobs:
           }
           Write-Host '[PASS] Release / two version-matched assets validated'
       - name: Preserve the two tested files for review
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: KeyPassXCCloudSync-${{ needs.preflight.outputs.version }}-win-x64-release-files
           path: |

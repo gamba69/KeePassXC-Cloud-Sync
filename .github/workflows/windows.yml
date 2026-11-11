@@ -46,7 +46,7 @@ jobs:
           if ($files.Count -ne 2) { throw 'Expected exactly the ZIP and its SHA-256 file.' }
           Write-Host '[PASS] CI / two version-matched portable assets verified'
       - name: Preserve tested CI package
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: KeyPassXCCloudSync-win-x64-CI
           path: ./dist/
