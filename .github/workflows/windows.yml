@@ -21,7 +21,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - name: Check out source without persisted credentials
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
       - name: Install .NET 10 SDK

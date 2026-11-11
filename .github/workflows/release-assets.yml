@@ -76,7 +76,7 @@ jobs:
       contents: read
     steps:
       - name: Check out the exact existing tag without credentials
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: refs/tags/${{ inputs.tag }}
           fetch-depth: 0
