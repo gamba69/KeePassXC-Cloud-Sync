@@ -1,0 +1,77 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <WarningLevel>4</WarningLevel>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisLevel>10.0</AnalysisLevel>
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <PublishAot>true</PublishAot>
+    <IsAotCompatible>true</IsAotCompatible>
+    <BuiltInComInteropSupport>false</BuiltInComInteropSupport>
+    <AssemblyName>KeyPassXCCloudSync</AssemblyName>
+    <RootNamespace>KeyPassXCCloudSync</RootNamespace>
+    <!-- Avalonia 12 enables compiled bindings by default; preserve that behavior. -->
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <ApplicationIcon>Assets\CloudSync_white.ico</ApplicationIcon>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\KeyPassXCCloudSync.Core\KeyPassXCCloudSync.Core.csproj" />
+    <PackageReference Include="Avalonia" Version="12.1.5" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.1.5" />
+    <PackageReference Include="Avalonia.Win32" Version="12.1.5" />
+    <PackageReference Include="Avalonia.Skia" Version="12.1.5" />
+    <PackageReference Include="Avalonia.HarfBuzz" Version="12.1.5" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.5" />
+    <PackageReference Include="FluentIcons.Avalonia" Version="2.1.345" />
+    <!-- Pin the compatible SkiaSharp 4.155.0 + HarfBuzzSharp 14.4.0
+         managed/native Windows family as specified by SkiaSharp.HarfBuzz.
+         Avalonia.Skia 12.1.5 declares minimum, not maximum, package versions. -->
+    <PackageReference Include="SkiaSharp" Version="4.155.0" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Win32" Version="4.155.0" />
+    <PackageReference Include="SkiaSharp.HarfBuzz" Version="4.155.0" />
+    <PackageReference Include="HarfBuzzSharp" Version="14.4.0" />
+    <PackageReference Include="HarfBuzzSharp.NativeAssets.Win32" Version="14.4.0" />
+    <AvaloniaResource Include="Assets\*.ico" />
+    <!-- Use native, untouched per-DPI icon frames without rescaling. -->
+    <AvaloniaResource Include="Assets\CloudSync_black_*.png" />
+    <AvaloniaResource Include="Assets\CloudSync_white_*.png" />
+  </ItemGroup>
+  <!-- AOT-safe compile-time dependency inventory, exactly as in the reference app. -->
+  <Target Name="GenerateAboutVersions" BeforeTargets="CoreCompile">
+    <PropertyGroup>
+      <_AboutAvalonia>@(PackageReference->WithMetadataValue('Identity','Avalonia')->'%(Version)')</_AboutAvalonia>
+      <_AboutAvaloniaDesktop>@(PackageReference->WithMetadataValue('Identity','Avalonia.Desktop')->'%(Version)')</_AboutAvaloniaDesktop>
+      <_AboutAvaloniaWin32>@(PackageReference->WithMetadataValue('Identity','Avalonia.Win32')->'%(Version)')</_AboutAvaloniaWin32>
+      <_AboutAvaloniaSkia>@(PackageReference->WithMetadataValue('Identity','Avalonia.Skia')->'%(Version)')</_AboutAvaloniaSkia>
+      <_AboutAvaloniaHarfBuzz>@(PackageReference->WithMetadataValue('Identity','Avalonia.HarfBuzz')->'%(Version)')</_AboutAvaloniaHarfBuzz>
+      <_AboutAvaloniaThemes>@(PackageReference->WithMetadataValue('Identity','Avalonia.Themes.Fluent')->'%(Version)')</_AboutAvaloniaThemes>
+      <_AboutFluentIcons>@(PackageReference->WithMetadataValue('Identity','FluentIcons.Avalonia')->'%(Version)')</_AboutFluentIcons>
+      <_AboutSkiaSharp>@(PackageReference->WithMetadataValue('Identity','SkiaSharp')->'%(Version)')</_AboutSkiaSharp>
+      <_AboutSkiaAssets>@(PackageReference->WithMetadataValue('Identity','SkiaSharp.NativeAssets.Win32')->'%(Version)')</_AboutSkiaAssets>
+      <_AboutSkiaHarfBuzz>@(PackageReference->WithMetadataValue('Identity','SkiaSharp.HarfBuzz')->'%(Version)')</_AboutSkiaHarfBuzz>
+      <_AboutHarfBuzzSharp>@(PackageReference->WithMetadataValue('Identity','HarfBuzzSharp')->'%(Version)')</_AboutHarfBuzzSharp>
+      <_AboutHarfBuzzAssets>@(PackageReference->WithMetadataValue('Identity','HarfBuzzSharp.NativeAssets.Win32')->'%(Version)')</_AboutHarfBuzzAssets>
+    </PropertyGroup>
+    <Error Condition="'$(_AboutAvalonia)' == ''" Text="About dependency missing: Avalonia" />
+    <Error Condition="'$(_AboutAvaloniaDesktop)' == ''" Text="About dependency missing: AvaloniaDesktop" />
+    <Error Condition="'$(_AboutAvaloniaWin32)' == ''" Text="About dependency missing: AvaloniaWin32" />
+    <Error Condition="'$(_AboutAvaloniaSkia)' == ''" Text="About dependency missing: AvaloniaSkia" />
+    <Error Condition="'$(_AboutAvaloniaHarfBuzz)' == ''" Text="About dependency missing: AvaloniaHarfBuzz" />
+    <Error Condition="'$(_AboutAvaloniaThemes)' == ''" Text="About dependency missing: AvaloniaThemes" />
+    <Error Condition="'$(_AboutFluentIcons)' == ''" Text="About dependency missing: FluentIcons" />
+    <Error Condition="'$(_AboutSkiaSharp)' == ''" Text="About dependency missing: SkiaSharp" />
+    <Error Condition="'$(_AboutSkiaAssets)' == ''" Text="About dependency missing: SkiaAssets" />
+    <Error Condition="'$(_AboutSkiaHarfBuzz)' == ''" Text="About dependency missing: SkiaHarfBuzz" />
+    <Error Condition="'$(_AboutHarfBuzzSharp)' == ''" Text="About dependency missing: HarfBuzzSharp" />
+    <Error Condition="'$(_AboutHarfBuzzAssets)' == ''" Text="About dependency missing: HarfBuzzAssets" />
+    <WriteLinesToFile File="$(IntermediateOutputPath)AboutDependencyVersions.g.cs" Lines="namespace KeyPassXCCloudSync { internal static class AboutDependencyVersions { public const string Avalonia = &quot;$(_AboutAvalonia)&quot;%3B public const string AvaloniaDesktop = &quot;$(_AboutAvaloniaDesktop)&quot;%3B public const string AvaloniaWin32 = &quot;$(_AboutAvaloniaWin32)&quot;%3B public const string AvaloniaSkia = &quot;$(_AboutAvaloniaSkia)&quot;%3B public const string AvaloniaHarfBuzz = &quot;$(_AboutAvaloniaHarfBuzz)&quot;%3B public const string AvaloniaThemes = &quot;$(_AboutAvaloniaThemes)&quot;%3B public const string FluentIcons = &quot;$(_AboutFluentIcons)&quot;%3B public const string SkiaSharp = &quot;$(_AboutSkiaSharp)&quot;%3B public const string SkiaAssets = &quot;$(_AboutSkiaAssets)&quot;%3B public const string SkiaHarfBuzz = &quot;$(_AboutSkiaHarfBuzz)&quot;%3B public const string HarfBuzzSharp = &quot;$(_AboutHarfBuzzSharp)&quot;%3B public const string HarfBuzzAssets = &quot;$(_AboutHarfBuzzAssets)&quot;%3B } }" Overwrite="true" WriteOnlyWhenDifferent="true" />
+    <ItemGroup>
+      <Compile Include="$(IntermediateOutputPath)AboutDependencyVersions.g.cs" />
+    </ItemGroup>
+  </Target>
+</Project>

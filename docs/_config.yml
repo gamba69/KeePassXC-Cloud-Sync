@@ -1,0 +1,6 @@
+title: KeyPassXC Cloud Sync
+description: Secure KeePassXC database synchronization across independent cloud connections.
+theme: jekyll-theme-cayman
+markdown: kramdown
+url: https://gamba69.github.io
+baseurl: /KeePassXC-Cloud-Sync

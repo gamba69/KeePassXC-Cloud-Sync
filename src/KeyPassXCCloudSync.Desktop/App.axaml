@@ -1,0 +1,54 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="KeyPassXCCloudSync.GuiApp"
+             RequestedThemeVariant="Default">
+  <Application.Resources>
+      <ResourceDictionary>
+        <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Light">
+          <SolidColorBrush x:Key="KpWindowBrush" Color="#f3f4f7" />
+          <SolidColorBrush x:Key="KpSurfaceBrush" Color="#ffffff" />
+          <SolidColorBrush x:Key="KpTextBrush" Color="#1c2730" />
+          <SolidColorBrush x:Key="KpSubtleBrush" Color="#637280" />
+          <SolidColorBrush x:Key="KpBorderBrush" Color="#ced4dc" />
+          <!-- Dedicated, deliberately visible window frame: not a form-field separator. -->
+          <SolidColorBrush x:Key="KpFrameBrush" Color="#697f98" />
+          <SolidColorBrush x:Key="KpSelectedBrush" Color="#dbeafe" />
+          <SolidColorBrush x:Key="KpSelectedTextBrush" Color="#172b45" />
+          <SolidColorBrush x:Key="KpButtonBrush" Color="#e8edf4" />
+          <SolidColorBrush x:Key="KpInputBrush" Color="#ffffff" />
+          <SolidColorBrush x:Key="KpCanvasBrush" Color="#c8cdd3" />
+          <SolidColorBrush x:Key="KpAccentBrush" Color="#2b68b6" />
+          <SolidColorBrush x:Key="KpErrorBrush" Color="#ba3232" />
+          <SolidColorBrush x:Key="KpRowHoverBrush" Color="#e6f0fc" />
+          <SolidColorBrush x:Key="KpRowMarkedBrush" Color="#cce1f8" />
+          <SolidColorBrush x:Key="KpRowMarkedHoverBrush" Color="#b6d6f8" />
+          <SolidColorBrush x:Key="KpZebraBrush" Color="#eef3f8" />
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Dark">
+          <SolidColorBrush x:Key="KpWindowBrush" Color="#081524" />
+          <SolidColorBrush x:Key="KpSurfaceBrush" Color="#182b3f" />
+          <SolidColorBrush x:Key="KpTextBrush" Color="#eef4fb" />
+          <SolidColorBrush x:Key="KpSubtleBrush" Color="#b2c0cf" />
+          <SolidColorBrush x:Key="KpBorderBrush" Color="#31475f" />
+          <SolidColorBrush x:Key="KpFrameBrush" Color="#6689a8" />
+          <SolidColorBrush x:Key="KpSelectedBrush" Color="#243b56" />
+          <SolidColorBrush x:Key="KpSelectedTextBrush" Color="#ffffff" />
+          <SolidColorBrush x:Key="KpButtonBrush" Color="#20384e" />
+          <SolidColorBrush x:Key="KpInputBrush" Color="#13273b" />
+          <SolidColorBrush x:Key="KpCanvasBrush" Color="#06111c" />
+          <SolidColorBrush x:Key="KpAccentBrush" Color="#6ea8ff" />
+          <SolidColorBrush x:Key="KpErrorBrush" Color="#ff8585" />
+          <SolidColorBrush x:Key="KpRowHoverBrush" Color="#29445d" />
+          <SolidColorBrush x:Key="KpRowMarkedBrush" Color="#2a5075" />
+          <SolidColorBrush x:Key="KpRowMarkedHoverBrush" Color="#37638d" />
+          <SolidColorBrush x:Key="KpZebraBrush" Color="#1d3246" />
+        </ResourceDictionary>
+        </ResourceDictionary.ThemeDictionaries>
+      </ResourceDictionary>
+    </Application.Resources>
+  <Application.Styles>
+    <FluentTheme />
+    <StyleInclude Source="avares://KeyPassXCCloudSync/Styles/CardPrintTabs.axaml" />
+  </Application.Styles>
+</Application>

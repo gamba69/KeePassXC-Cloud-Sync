@@ -1,0 +1,8 @@
+Fluent UI System Icons — Copyright (c) Microsoft Corporation.
+MIT license: https://github.com/microsoft/fluentui-system-icons/blob/main/LICENSE
+FluentIcons.Avalonia by davidxuang: https://github.com/davidxuang/FluentIcons
+NuGet package FluentIcons.Avalonia 2.1.345 (MIT).
+
+The app uses the package's actual Microsoft Fluent System Icons 20px Regular
+font glyphs. No icon fonts are copied into this source archive; NuGet resolves
+them at build time. The app brand/tray icons remain the project's own assets.

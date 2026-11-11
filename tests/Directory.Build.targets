@@ -1,0 +1,6 @@
+<Project>
+  <!-- One reporting contract for every test executable. -->
+  <ItemGroup>
+    <Compile Include="$(MSBuildThisFileDirectory)TestReporter.cs" Link="TestReporter.cs" />
+  </ItemGroup>
+</Project>

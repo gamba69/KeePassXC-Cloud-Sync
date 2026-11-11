@@ -1,0 +1,54 @@
+name: Windows CI — KeyPassXC Cloud Sync
+
+# Validate every pushed branch and pull request, but not tag creation.
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-nativeaot:
+    name: Build, test and package Windows x64 Native AOT
+    runs-on: windows-2025
+    timeout-minutes: 60
+    steps:
+      - name: Check out source without persisted credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Validate PowerShell 5.1 scripts and source metadata
+        shell: cmd
+        run: build.bat -ValidateOnly -NoPause
+      - name: Build, run every test, publish Native AOT and package
+        shell: cmd
+        run: build.bat -NoPause
+      - name: Verify ZIP, SHA-256 and exactly two release candidates
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          [xml]$props = Get-Content ./Directory.Build.props -Raw
+          $version = $props.SelectSingleNode('/Project/PropertyGroup/Version').InnerText.Trim()
+          ./scripts/validate-release.ps1 -Zip "./dist/KeyPassXCCloudSync-$version-win-x64.zip" -Checksum "./dist/KeyPassXCCloudSync-$version-win-x64.sha256"
+          if (-not $?) { throw 'Portable ZIP / checksum validation failed' }
+          $files = @(Get-ChildItem ./dist -File)
+          if ($files.Count -ne 2) { throw 'Expected exactly the ZIP and its SHA-256 file.' }
+          Write-Host '[PASS] CI / two version-matched portable assets verified'
+      - name: Preserve tested CI package
+        uses: actions/upload-artifact@v4
+        with:
+          name: KeyPassXCCloudSync-win-x64-CI
+          path: ./dist/
+          if-no-files-found: error
+          retention-days: 7

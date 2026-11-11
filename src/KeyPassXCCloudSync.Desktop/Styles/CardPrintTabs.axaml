@@ -1,0 +1,28 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <!-- Exact tab styles from the supplied KeePassXCCardPrint
+       Styles/Compact.axaml. Only the selector is scoped to the Cloud Sync
+       navigation so no other controls are affected. -->
+  <Style Selector="TabItem.cloud-sync-nav-tab">
+    <Setter Property="MinHeight" Value="29" />
+    <Setter Property="Padding" Value="11,5" />
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="Background" Value="{DynamicResource KpButtonBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource KpTextBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource KpBorderBrush}" />
+  </Style>
+  <Style Selector="TabItem.cloud-sync-nav-tab:selected">
+    <Setter Property="Background" Value="{DynamicResource KpSurfaceBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource KpTextBrush}" />
+  </Style>
+  <!-- Avalonia 12 Fluent TabItem template draws a thin selected underline.
+       Hide its PART_SelectedPipe in every state, keeping the compact
+       selected-tab background as the sole selection indicator. -->
+  <Style Selector="TabItem.cloud-sync-nav-tab:selected /template/ Border#PART_SelectedPipe">
+    <Setter Property="IsVisible" Value="False" />
+    <Setter Property="Height" Value="0" />
+  </Style>
+  <Style Selector="TabItem.cloud-sync-nav-tab:pointerover">
+    <Setter Property="Background" Value="{DynamicResource KpSelectedBrush}" />
+  </Style>
+</Styles>

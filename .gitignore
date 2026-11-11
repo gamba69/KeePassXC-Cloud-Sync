@@ -1,0 +1,50 @@
+**/bin/
+**/obj/
+KeePassSync.ini
+KeyPassXCCloudSync.ini
+*.kdbx
+*.kdbx.sha256
+**/data/
+**/logs/
+**/state.json
+**/backup/
+**/startup-backups/
+**/conflicts/
+**/temp/
+
+# Embedded local/cloud test reports
+**/test-results/
+**/integration-results/
+
+# Publish deliverables and transient debug symbols
+**/publish/
+**/Publish/
+**/*.pdb
+
+# Private local credentials, state, and signing assets
+**/usage.json
+**/topology.json
+**/topology-pending.json
+**/*.pfx
+**/*.p12
+**/*.pem
+**/*.key
+**/*.secret
+**/*.secrets
+**/.env
+**/.env.*
+**/.vs/
+**/TestResults/
+**/dist/
+
+# Local UI state, logs and tools (never commit user-specific data)
+**/ui/
+**/usage-ui.txt
+**/window-*.txt
+**/startup-errors.log
+**/proton-drive.exe
+**/tools/
+**/*.keyx
+**/*.keyfile
+**/*.bak
+**/secrets.json

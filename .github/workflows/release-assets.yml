@@ -1,0 +1,189 @@
+name: Build Windows package for existing Cloud Sync draft release
+
+# Tag -> draft -> manual build -> review -> manual publish.
+# Never triggered by a push, a tag or a newly created release.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag (vN.N.N or N.N.N) with an unpublished empty draft'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: draft-release-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    name: Verify existing tag and unpublished draft
+    runs-on: ubuntu-latest
+    permissions:
+      # GitHub restricts reading drafts to tokens with write access.
+      contents: write
+    outputs:
+      version: ${{ steps.validate.outputs.version }}
+      tag_object: ${{ steps.validate.outputs.tag_object }}
+      tag_commit: ${{ steps.validate.outputs.tag_commit }}
+      draft_id: ${{ steps.validate.outputs.draft_id }}
+    steps:
+      - name: Validate tag, source commit and empty draft
+        id: validate
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$RELEASE_TAG" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo '[FAIL] Tag must be N.N.N or vN.N.N.' >&2
+            exit 1
+          fi
+          tag_object="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" --jq '.object.sha')"
+          tag_commit="$(gh api "repos/$GITHUB_REPOSITORY/commits/$RELEASE_TAG" --jq '.sha')"
+          if [[ ! "$tag_object" =~ ^[0-9a-f]{40}$ || ! "$tag_commit" =~ ^[0-9a-f]{40}$ ]]; then
+            echo '[FAIL] Existing tag or its commit could not be verified.' >&2
+            exit 1
+          fi
+          draft="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,tagName,assets)"
+          echo "$draft" | jq -e --arg tag "$RELEASE_TAG" \
+            '.isDraft == true and .tagName == $tag and (.assets | length) == 0' >/dev/null || {
+            echo '[FAIL] The matching unpublished draft must exist and contain no assets.' >&2
+            exit 1
+          }
+          draft_id="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" --jq '.id')"
+          if [[ ! "$draft_id" =~ ^[0-9]+$ ]]; then
+            echo '[FAIL] Could not identify the existing draft.' >&2
+            exit 1
+          fi
+          {
+            echo "version=${RELEASE_TAG#v}"
+            echo "tag_object=$tag_object"
+            echo "tag_commit=$tag_commit"
+            echo "draft_id=$draft_id"
+          } >> "$GITHUB_OUTPUT"
+          echo '[PASS] Release / existing immutable tag and empty unpublished draft verified'
+
+  build:
+    name: Build, test and package Windows Native AOT
+    needs: preflight
+    runs-on: windows-2025
+    timeout-minutes: 75
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the exact existing tag without credentials
+        uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ inputs.tag }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify checkout and source version match the tag
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+          EXPECTED_VERSION: ${{ needs.preflight.outputs.version }}
+          EXPECTED_TAG_OBJECT: ${{ needs.preflight.outputs.tag_object }}
+          EXPECTED_TAG_COMMIT: ${{ needs.preflight.outputs.tag_commit }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $commit = (git rev-parse HEAD).Trim()
+          if ($LASTEXITCODE -ne 0 -or $commit -cne $env:EXPECTED_TAG_COMMIT) { throw 'Checkout differs from the preflight tag commit.' }
+          $tagObject = (git rev-parse "refs/tags/$($env:RELEASE_TAG)").Trim()
+          if ($LASTEXITCODE -ne 0 -or $tagObject -cne $env:EXPECTED_TAG_OBJECT) { throw 'Tag reference differs from the preflight tag object.' }
+          ./scripts/validate-release.ps1 -Tag $env:RELEASE_TAG
+          if (-not $?) { throw 'Tag and source version validation failed.' }
+          Write-Host '[PASS] Release / exact tag and source version verified'
+      - name: Install .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Build, run all tests and create portable ZIP and SHA-256
+        shell: cmd
+        run: build.bat -NoPause
+      - name: Verify the built release assets
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_VERSION: ${{ needs.preflight.outputs.version }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $zip = "./dist/KeyPassXCCloudSync-$($env:RELEASE_VERSION)-win-x64.zip"
+          $checksum = "./dist/KeyPassXCCloudSync-$($env:RELEASE_VERSION)-win-x64.sha256"
+          ./scripts/validate-release.ps1 -Tag $env:RELEASE_TAG -Zip $zip -Checksum $checksum
+          if (-not $?) { throw 'Release ZIP or checksum validation failed.' }
+          $files = @(Get-ChildItem ./dist -File)
+          $wanted = @( "KeyPassXCCloudSync-$($env:RELEASE_VERSION)-win-x64.zip", "KeyPassXCCloudSync-$($env:RELEASE_VERSION)-win-x64.sha256" )
+          if ($files.Count -ne 2 -or @($files | Where-Object { $wanted -cnotcontains $_.Name }).Count -ne 0) {
+            throw 'Release directory contains unexpected or missing assets.'
+          }
+          Write-Host '[PASS] Release / two version-matched assets validated'
+      - name: Preserve the two tested files for review
+        uses: actions/upload-artifact@v4
+        with:
+          name: KeyPassXCCloudSync-${{ needs.preflight.outputs.version }}-win-x64-release-files
+          path: |
+            dist/KeyPassXCCloudSync-${{ needs.preflight.outputs.version }}-win-x64.zip
+            dist/KeyPassXCCloudSync-${{ needs.preflight.outputs.version }}-win-x64.sha256
+          if-no-files-found: error
+          retention-days: 30
+
+  attach:
+    name: Verify and attach to existing draft (never publish)
+    needs: [preflight, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download the tested build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: KeyPassXCCloudSync-${{ needs.preflight.outputs.version }}-win-x64-release-files
+          path: release-files
+      - name: Revalidate checksum, unchanged tag and draft; attach without overwrite
+        shell: bash
+        working-directory: release-files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_VERSION: ${{ needs.preflight.outputs.version }}
+          EXPECTED_TAG_OBJECT: ${{ needs.preflight.outputs.tag_object }}
+          EXPECTED_TAG_COMMIT: ${{ needs.preflight.outputs.tag_commit }}
+          EXPECTED_DRAFT_ID: ${{ needs.preflight.outputs.draft_id }}
+        run: |
+          set -euo pipefail
+          zip="KeyPassXCCloudSync-${RELEASE_VERSION}-win-x64.zip"
+          checksum="KeyPassXCCloudSync-${RELEASE_VERSION}-win-x64.sha256"
+          [[ -f "$zip" && -f "$checksum" ]] || { echo '[FAIL] Missing ZIP or checksum.' >&2; exit 1; }
+          [[ "$(find . -maxdepth 1 -type f | wc -l)" -eq 2 ]] || { echo '[FAIL] Unexpected release file.' >&2; exit 1; }
+          sha256sum -c "$checksum"
+          echo '[PASS] Release / checksum verified on separate runner'
+          current_object="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" --jq '.object.sha')"
+          current_commit="$(gh api "repos/$GITHUB_REPOSITORY/commits/$RELEASE_TAG" --jq '.sha')"
+          if [[ "$current_object" != "$EXPECTED_TAG_OBJECT" || "$current_commit" != "$EXPECTED_TAG_COMMIT" ]]; then
+            echo '[FAIL] Source tag changed during the build.' >&2
+            exit 1
+          fi
+          current_draft_id="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" --jq '.id')"
+          if [[ "$current_draft_id" != "$EXPECTED_DRAFT_ID" ]]; then
+            echo '[FAIL] Draft release was replaced during the build.' >&2
+            exit 1
+          fi
+          draft="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,tagName,assets)"
+          echo "$draft" | jq -e --arg tag "$RELEASE_TAG" \
+            '.isDraft == true and .tagName == $tag and (.assets | length) == 0' >/dev/null || {
+            echo '[FAIL] Draft is published, missing or already has assets; refusing to overwrite.' >&2
+            exit 1
+          }
+          # Asset replacement and release publication are deliberately forbidden.
+          gh release upload "$RELEASE_TAG" "$zip" "$checksum" --repo "$GITHUB_REPOSITORY"
+          after="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,tagName,assets)"
+          echo "$after" | jq -e --arg tag "$RELEASE_TAG" --arg zip "$zip" --arg sha "$checksum" \
+            '.isDraft == true and .tagName == $tag and (.assets | length) == 2 and any(.assets[]; .name == $zip) and any(.assets[]; .name == $sha)' >/dev/null || {
+            echo '[FAIL] Final draft verification failed; review it manually.' >&2
+            exit 1
+          }
+          echo '[PASS] Release / exactly two assets attached; draft remains unpublished'
