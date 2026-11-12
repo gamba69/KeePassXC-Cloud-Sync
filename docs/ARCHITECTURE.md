@@ -78,7 +78,7 @@ The Core project targets the portable `net10.0` TFM. Its file and HTTP operation
 
 The source guard checks these boundaries and rejects direct native calls, shell/process probing, and Windows entrypoint coupling in shared code. This review does **not** replace compilation, headless regression tests, or an actual Windows integration run.
 
-## Version 7.1.13 development transition (not yet release qualified)
+## Version 7.1.15 development transition (not yet release qualified)
 
 The Status subtitle distinguishes independent live cloud activity from the
 host's periodic maintenance timer. While idle it uses the current configured

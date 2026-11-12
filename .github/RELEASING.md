@@ -6,13 +6,13 @@ This page is for repository maintainers, **not** end-user documentation. GitHub 
 
 1. Update `Version` in `Directory.Build.props` and commit the complete source tree to the default branch.
 2. Let Windows CI (on all branches and pull requests, but not tag pushes) build and all tests pass.
-3. Create and push **one** tag matching that exact version: `v7.1.13` **or** `7.1.13`. Do not push both spellings for the same version.
+3. Create and push **one** tag matching that exact version: `v7.1.15` **or** `7.1.15`. Do not push both spellings for the same version.
 
 For example:
 
 ```shell
-git tag v7.1.13
-git push origin v7.1.13
+git tag v7.1.15
+git push origin v7.1.15
 ```
 
 Both version formats are accepted by the manual Action. No Action is triggered by tag creation, deletion or recreation. Always create the GitHub draft against an **existing** tag; keep the tagged source version consistent with `Directory.Build.props`.
@@ -25,7 +25,9 @@ On GitHub open **Releases → Draft a new release**, choose the **existing** ver
 
 Under **Actions** select **Build and attach portable ZIP to existing draft (manual)**, then choose **Run workflow** and enter the exact existing tag (`vN.N.N` or `N.N.N`). You may launch the action from the default branch; it explicitly checks out the **tagged commit**. The workflow requires an empty, unpublished draft; no pre-existing file is overwritten.
 
-The workflow uses **three isolated jobs**: a Linux draft/tag preflight (`contents: write` is necessary to view drafts), a read-only Windows build, and a Linux attachment job with scoped write access. The build runs `build.bat -NoPause`: all source checks, all ten C# test suites and NativeAOT, then packages a portable Windows x64 ZIP and creates the matching `KeyPassXCCloudSync-N.N.N-win-x64.sha256`. It does not download or bundle Proton Drive CLI. Users obtain that optional tool from Proton separately. User passwords, authentication sessions, INI configuration, KDBX files and local state are never put into the ZIP.
+The workflow uses **three isolated jobs**: a Linux draft/tag preflight (`contents: write` is needed for draft access), a read-only Windows build, and a Linux attachment job with scoped write access. The workflow never queries the `releases/tags/{tag}` endpoint for a draft: that endpoint exposes published releases only. Instead, it searches the authenticated, paginated release listing for one exact matching unpublished draft, records its numeric ID, and uploads the two assets directly to that ID. If the automatic `GITHUB_TOKEN` cannot see the draft in the listing, configure an optional repository Actions secret named `RELEASE_DRAFT_TOKEN` containing a fine-grained GitHub personal access token scoped only to this repository with **Contents: Read and write** permission. Do not put token values in the workflow or commit them. This optional token is used only in the draft-preflight and asset-attachment jobs; the Windows build continues with a read-only token.
+
+The workflow is always executed from the selected source branch, but the Windows build explicitly checks out the existing tag. A workflow-only fix on `main` can therefore still build a previously created tag, provided its immutable source and version validate. The build runs `build.bat -NoPause`: all source checks, all ten C# test suites and NativeAOT, then packages a portable Windows x64 ZIP and creates the matching `KeyPassXCCloudSync-N.N.N-win-x64.sha256`. It does not download or bundle Proton Drive CLI. Users obtain that optional tool from Proton separately. User passwords, authentication sessions, INI configuration, KDBX files and local state are never put into the ZIP.
 
 Two assets are attached to the existing draft:
 

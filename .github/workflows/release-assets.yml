@@ -34,7 +34,7 @@ jobs:
         id: validate
         shell: bash
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.RELEASE_DRAFT_TOKEN || github.token }}
           RELEASE_TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
@@ -48,13 +48,21 @@ jobs:
             echo '[FAIL] Existing tag or its commit could not be verified.' >&2
             exit 1
           fi
-          draft="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,tagName,assets)"
-          echo "$draft" | jq -e --arg tag "$RELEASE_TAG" \
-            '.isDraft == true and .tagName == $tag and (.assets | length) == 0' >/dev/null || {
-            echo '[FAIL] The matching unpublished draft must exist and contain no assets.' >&2
+          # The releases/tags/{tag} endpoint is for published releases. It
+          # returns HTTP 404 for a draft, so look up the exact draft in the
+          # authenticated, paginated release collection instead.
+          drafts="$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --paginate |
+            jq -sc --arg tag "$RELEASE_TAG" '[.[][] | select(.draft == true and .tag_name == $tag)]')"
+          if [[ "$(jq 'length' <<< "$drafts")" -ne 1 ]]; then
+            echo '[FAIL] The matching unpublished draft is not visible to the release token.' >&2
+            echo '[FAIL] Check the tag or configure RELEASE_DRAFT_TOKEN with Contents: read/write.' >&2
             exit 1
-          }
-          draft_id="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" --jq '.id')"
+          fi
+          if ! jq -e '.[0].assets | length == 0' <<< "$drafts" >/dev/null; then
+            echo '[FAIL] Draft already has assets; refusing to overwrite.' >&2
+            exit 1
+          fi
+          draft_id="$(jq -r '.[0].id' <<< "$drafts")"
           if [[ ! "$draft_id" =~ ^[0-9]+$ ]]; then
             echo '[FAIL] Could not identify the existing draft.' >&2
             exit 1
@@ -147,7 +155,7 @@ jobs:
         shell: bash
         working-directory: release-files
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.RELEASE_DRAFT_TOKEN || github.token }}
           RELEASE_TAG: ${{ inputs.tag }}
           RELEASE_VERSION: ${{ needs.preflight.outputs.version }}
           EXPECTED_TAG_OBJECT: ${{ needs.preflight.outputs.tag_object }}
@@ -167,23 +175,47 @@ jobs:
             echo '[FAIL] Source tag changed during the build.' >&2
             exit 1
           fi
-          current_draft_id="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" --jq '.id')"
-          if [[ "$current_draft_id" != "$EXPECTED_DRAFT_ID" ]]; then
-            echo '[FAIL] Draft release was replaced during the build.' >&2
+          # Re-read the draft by exact tag, not by releases/tags/{tag}, since
+          # the latter excludes unpublished releases.
+          drafts="$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --paginate |
+            jq -sc --arg tag "$RELEASE_TAG" '[.[][] | select(.draft == true and .tag_name == $tag)]')"
+          if ! jq -e --argjson id "$EXPECTED_DRAFT_ID" \
+            'length == 1 and .[0].id == $id and (.[0].assets | length) == 0' \
+            <<< "$drafts" >/dev/null; then
+            echo '[FAIL] Draft is inaccessible, changed, published, or no longer empty.' >&2
             exit 1
           fi
-          draft="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,tagName,assets)"
-          echo "$draft" | jq -e --arg tag "$RELEASE_TAG" \
-            '.isDraft == true and .tagName == $tag and (.assets | length) == 0' >/dev/null || {
-            echo '[FAIL] Draft is published, missing or already has assets; refusing to overwrite.' >&2
-            exit 1
+          # Upload directly to the verified draft ID. gh release upload resolves
+          # releases by tag, which can fail for drafts under GITHUB_TOKEN.
+          # Do not retry, overwrite, replace assets, or publish the draft.
+          upload_asset() {
+            local file="$1"
+            local mime="$2"
+            local response
+            response="$(curl --fail-with-body --silent --show-error --max-time 900 \
+              -X POST \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H 'Accept: application/vnd.github+json' \
+              -H "Content-Type: $mime" \
+              --data-binary "@$file" \
+              "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$EXPECTED_DRAFT_ID/assets?name=$file")"
+            if ! jq -e --arg name "$file" '.name == $name and .state == "uploaded"' \
+              <<< "$response" >/dev/null; then
+              echo "[FAIL] Asset upload was not confirmed: $file" >&2
+              exit 1
+            fi
           }
-          # Asset replacement and release publication are deliberately forbidden.
-          gh release upload "$RELEASE_TAG" "$zip" "$checksum" --repo "$GITHUB_REPOSITORY"
-          after="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,tagName,assets)"
-          echo "$after" | jq -e --arg tag "$RELEASE_TAG" --arg zip "$zip" --arg sha "$checksum" \
-            '.isDraft == true and .tagName == $tag and (.assets | length) == 2 and any(.assets[]; .name == $zip) and any(.assets[]; .name == $sha)' >/dev/null || {
-            echo '[FAIL] Final draft verification failed; review it manually.' >&2
+          upload_asset "$zip" 'application/zip'
+          upload_asset "$checksum" 'text/plain'
+          after="$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --paginate |
+            jq -sc --arg tag "$RELEASE_TAG" '[.[][] | select(.draft == true and .tag_name == $tag)]')"
+          if ! jq -e --argjson id "$EXPECTED_DRAFT_ID" --arg zip "$zip" --arg sha "$checksum" \
+            'length == 1 and .[0].id == $id and
+            (.[0].assets | length) == 2 and
+            any(.[0].assets[]; .name == $zip and .state == "uploaded") and
+            any(.[0].assets[]; .name == $sha and .state == "uploaded")' \
+            <<< "$after" >/dev/null; then
+            echo '[FAIL] Final draft verification failed; review assets manually.' >&2
             exit 1
-          }
+          fi
           echo '[PASS] Release / exactly two assets attached; draft remains unpublished'

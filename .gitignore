@@ -48,3 +48,7 @@ KeyPassXCCloudSync.ini
 **/*.keyfile
 **/*.bak
 **/secrets.json
+
+# Local patch and ZIP files in the repository root only
+/*.patch
+/*.zip
