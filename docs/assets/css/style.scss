@@ -1,0 +1,178 @@
+---
+---
+
+// Customize the bundled Cayman theme without replacing its layout.
+$header-heading-color: #f5f9ff;
+$header-bg-color: #102f52;
+$header-bg-color-secondary: #081726;
+$section-headings-color: #90d9ff;
+$body-text-color: #d6e2f0;
+$body-link-color: #74c9ff;
+$code-bg-color: #14253a;
+$code-text-color: #dcecff;
+$border-color: #2c425d;
+$table-border-color: #2c425d;
+$hr-border-color: #2c425d;
+
+@import "{{ site.theme }}";
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  background: #0b1322;
+  color: #d6e2f0;
+}
+
+.page-header {
+  background: linear-gradient(120deg, #102c4a 0%, #0b1b2e 60%, #0a1525 100%);
+  border-bottom: 1px solid #29445f;
+  padding-top: 2.5rem;
+  padding-bottom: 2.5rem;
+}
+
+.project-name {
+  color: #f5f9ff;
+  letter-spacing: -0.025em;
+}
+
+.project-tagline {
+  color: #b8d0e6;
+  opacity: 1;
+}
+
+.main-content {
+  color: #d6e2f0;
+  max-width: 72rem;
+}
+
+.main-content h1,
+.main-content h2,
+.main-content h3,
+.main-content h4,
+.main-content h5,
+.main-content h6 {
+  color: #91d6ff;
+  font-weight: 600;
+}
+
+.main-content h1,
+.main-content h2 {
+  border-bottom: 1px solid #263a52;
+  padding-bottom: 0.35em;
+}
+
+a,
+.main-content a {
+  color: #7bcaff;
+  text-decoration-color: #4779a3;
+  text-underline-offset: 0.15em;
+}
+
+a:hover,
+.main-content a:hover {
+  color: #b3e4ff;
+  text-decoration: underline;
+}
+
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid #9bdcff;
+  outline-offset: 3px;
+  border-radius: 3px;
+}
+
+.main-content strong {
+  color: #f2f7ff;
+}
+
+.main-content blockquote {
+  color: #b8cbe1;
+  border-left-color: #3b678e;
+  background: #111f31;
+  padding: 0.5rem 1rem;
+  border-radius: 0 0.5rem 0.5rem 0;
+}
+
+.main-content hr {
+  background-color: #293e56;
+}
+
+.main-content table {
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid #30465e;
+  border-radius: 0.65rem;
+  overflow: hidden;
+}
+
+.main-content table th,
+.main-content table td {
+  border-color: #30465e;
+  color: #d6e2f0;
+}
+
+.main-content table th {
+  background: #18314b;
+  color: #eef6ff;
+}
+
+.main-content table tr,
+.main-content table tr:nth-child(odd) {
+  background: #101c2e;
+}
+
+.main-content table tr:nth-child(even) {
+  background: #14243a;
+}
+
+.main-content pre,
+.main-content .highlight,
+.main-content code {
+  color: #deebf9;
+  background: #132238;
+  border-color: #2c425d;
+}
+
+.main-content pre {
+  border: 1px solid #2c425d;
+  border-radius: 0.6rem;
+}
+
+.main-content img {
+  display: block;
+  height: auto;
+  max-width: 100%;
+  border: 1px solid #29405d;
+  border-radius: 0.75rem;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
+  margin: 1.4rem auto 2rem;
+}
+
+.main-content img[src*="/images/hero-collage.png"] {
+  border-color: #385c83;
+  border-radius: 1rem;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+}
+
+.site-footer,
+.site-footer-owner,
+.site-footer-credits {
+  color: #9db2c9;
+  border-color: #2c425d;
+}
+
+@media screen and (max-width: 42em) {
+  .page-header {
+    padding: 2rem 1rem;
+  }
+
+  .main-content {
+    padding: 1.75rem 1rem;
+  }
+
+  .main-content img {
+    border-radius: 0.5rem;
+  }
+}

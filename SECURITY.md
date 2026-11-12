@@ -2,7 +2,7 @@
 
 ## Supported version
 
-The current development source version is **7.1.11** for Windows x64. This version is not production qualified until its Windows build and safety tests pass. The remote synchronization protocol retains schema version 2; that is not an additional supported application release.
+The current development source version is **7.1.13** for Windows x64. This version is not production qualified until its Windows build and safety tests pass. The remote synchronization protocol retains schema version 2; that is not an additional supported application release.
 
 ## Vulnerability disclosure
 

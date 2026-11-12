@@ -1,4 +1,4 @@
-; KeyPassXC Cloud Sync 7.1.11 — example only; the GUI creates the actual configuration.
+; KeyPassXC Cloud Sync 7.1.13 — example only; the GUI creates the actual configuration.
 ; Do not edit INI by hand for ordinary setup.
 [General]
 LocalFile = D:\Passwords\Passwords.kdbx

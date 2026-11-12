@@ -7,20 +7,18 @@
 [![Windows CI](https://img.shields.io/badge/CI-Windows%20NativeAOT-informational)](.github/workflows/windows.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-**Version:** 7.1.11 · **Platform:** Windows x64 · **Framework:** .NET 10, Avalonia 12 · **License:** MIT.
+**Version:** 7.1.13 · **Platform:** Windows x64 · **Framework:** .NET 10, Avalonia 12 · **License:** MIT.
 
-> **Version 7 development source — not production qualified.** Version 7.1.11
-> keeps the 7.1 synchronization engine and refreshes the project documentation,
-> README and GitHub Pages presentation with the selected promotional banner.
-> Current UI screenshots remain in the illustrated user guide.
-> This source has **not** been compiled or tested with real clouds; Windows .NET
-> build, CI, safety tests and multi-PC acceptance are required before a stable
-> release.
+> **Version 7 development source — not production qualified.** Version 7.1.13
+> retains the current synchronization engine and updates only GitHub Pages
+> styling and documentation. The application source has **not** been compiled
+> or tested with real clouds; Windows .NET build, CI, safety tests and multi-PC
+> acceptance are required before a stable release.
 
-Version 7.1.11 updates the promotional header artwork for the repository and
-GitHub Pages. The header is a visual illustration; the screenshots in the
-gallery below are actual captures of the desktop application. No runtime or
-synchronization behavior changes in this documentation update.
+Version 7.1.13 adds a permanent dark presentation to the GitHub Pages home
+page and privacy policy using the supported Cayman stylesheet override.
+The promotional banner and the original application screenshots are unchanged;
+Windows app code, OAuth behavior and synchronization logic are unchanged.
 
 
 KeyPassXC Cloud Sync synchronizes encrypted `.kdbx` files between multiple
@@ -114,6 +112,11 @@ by themselves. Review diagnostics before sharing them.
 - [User guide](docs/USER_GUIDE.md) — setup, providers, daily operation, status, backup, conflict handling and removal.
 - [Public GitHub Pages home page](docs/index.md) — product overview, screenshots and support links.
 - [Privacy policy](docs/privacy.md) — data handling statement for users and Google OAuth review.
+
+The GitHub Pages home and privacy pages use a custom **dark Cayman** stylesheet
+from [`docs/assets/css/style.scss`](docs/assets/css/style.scss). Jekyll applies
+it to both pages when Pages is published from `/docs`. This does not change the
+README appearance on GitHub itself.
 
 GitHub Pages deployment (once the updated `/docs` folder is on the publishing branch):
 **Settings → Pages → Deploy from a branch → `main` → `/docs`**.

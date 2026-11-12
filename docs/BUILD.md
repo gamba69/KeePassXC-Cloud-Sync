@@ -60,4 +60,4 @@ If a case fails, `[FAIL] Suite / case: reason` is printed and the overall comman
 
 ### Version policy
 
-The source distribution uses **7.1.11** from `Directory.Build.props` and no per-release changelog or upgrade scripts. The remote protocol's schema identifier does not change when an application version changes. Any future changes to that remote schema would require explicit specification, security review and tests; they are not hidden inside a routine packaging change.
+The source distribution uses **7.1.13** from `Directory.Build.props` and no per-release changelog or upgrade scripts. The remote protocol's schema identifier does not change when an application version changes. Any future changes to that remote schema would require explicit specification, security review and tests; they are not hidden inside a routine packaging change.

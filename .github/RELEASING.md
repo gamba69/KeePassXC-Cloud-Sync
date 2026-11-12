@@ -6,13 +6,13 @@ This page is for repository maintainers, **not** end-user documentation. GitHub 
 
 1. Update `Version` in `Directory.Build.props` and commit the complete source tree to the default branch.
 2. Let Windows CI (on all branches and pull requests, but not tag pushes) build and all tests pass.
-3. Create and push **one** tag matching that exact version: `v7.1.8` **or** `7.1.8`. Do not push both spellings for the same version.
+3. Create and push **one** tag matching that exact version: `v7.1.13` **or** `7.1.13`. Do not push both spellings for the same version.
 
 For example:
 
 ```shell
-git tag v7.1.8
-git push origin v7.1.8
+git tag v7.1.13
+git push origin v7.1.13
 ```
 
 Both version formats are accepted by the manual Action. No Action is triggered by tag creation, deletion or recreation. Always create the GitHub draft against an **existing** tag; keep the tagged source version consistent with `Directory.Build.props`.

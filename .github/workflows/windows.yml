@@ -21,11 +21,11 @@ jobs:
     timeout-minutes: 60
     steps:
       - name: Check out source without persisted credentials
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
       - name: Install .NET 10 SDK
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
       - name: Validate PowerShell 5.1 scripts and source metadata
@@ -46,7 +46,7 @@ jobs:
           if ($files.Count -ne 2) { throw 'Expected exactly the ZIP and its SHA-256 file.' }
           Write-Host '[PASS] CI / two version-matched portable assets verified'
       - name: Preserve tested CI package
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: KeyPassXCCloudSync-win-x64-CI
           path: ./dist/
