@@ -7,21 +7,20 @@
 [![Windows CI](https://img.shields.io/badge/CI-Windows%20NativeAOT-informational)](.github/workflows/windows.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-**Version:** 7.1.15 · **Platform:** Windows x64 · **Framework:** .NET 10, Avalonia 12 · **License:** MIT.
+**Version:** 7.1.16 · **Platform:** Windows x64 · **Framework:** .NET 10, Avalonia 12 · **License:** MIT.
 
-> **Version 7 development source — not production qualified.** Version 7.1.15
+> **Version 7 development source — not production qualified.** Version 7.1.16
 > retains the current synchronization engine and corrected manual draft-release
 > workflow. Root-level local `.patch` and `.zip` files are ignored by Git.
 > The application source has **not** been compiled or tested with real clouds;
 > Windows .NET build, CI, safety tests and multi-PC acceptance are required
 > before a stable release.
 
-Version 7.1.15 adds root-only `.gitignore` entries for local `.patch` and
-`.zip` files so source patches and downloaded ZIP archives are not accidentally
-committed. The corrected draft-release workflow from 7.1.14 remains in place:
-it finds the authenticated draft by its exact tag and attaches verified release
-assets by numeric release ID. Windows app code, OAuth behavior and
-synchronization logic are unchanged.
+Version 7.1.16 refreshes the README and GitHub Pages hero collage: the
+fixed version badge in the upper-right corner is replaced with a cloud
+synchronization graphic. The rest of the artwork, including real application
+screenshots, remains unchanged. Synchronization behavior and release workflows
+are unchanged.
 
 
 KeyPassXC Cloud Sync synchronizes encrypted `.kdbx` files between multiple
