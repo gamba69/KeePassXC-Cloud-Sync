@@ -4,6 +4,79 @@ All notable application and repository changes are recorded here, newest first.
 This is the only release-history document. All other documentation describes
 only the latest application behavior.
 
+## [8.0.3] - 2026-11-14
+
+### Fixed
+
+- Update the LocalizationTests UI-source guard to match the typed
+  UiErrorDisplay.PresentCloud(status) path introduced in 8.0.0, while continuing
+  to require localized presentation for cloud action guidance.
+- Split the guard into separately reported assertions for errors and actions,
+  so a future failure identifies the broken presentation path precisely.
+
+### Tests
+
+- Add runtime RU/UK/EN assertions for Proton and generic authentication errors,
+  including suppression of provider diagnostic payloads in visible messages.
+- Keep the localization test suite in the mandatory build gate; no runtime
+  synchronization behavior or remote protocol schema changes.
+
+## [8.0.2] - 2026-11-14
+
+### Fixed
+
+- Restore the Core project reference in the standalone LocalizationTests build:
+  UiErrorDisplay now consumes ReplicaStatus and CloudTransportException.
+- Grant the localization test assembly internal access to the Core provider error
+  contract without making its implementation types public.
+
+### Tests
+
+- Verify localized OAuth exceptions through the production presentation adapter,
+  including rejection of sensitive raw error text in RU, UK and EN.
+- Keep LocalizationTests as a mandatory Windows build gate.
+
+## [8.0.1] - 2026-11-14
+
+### Fixed
+
+- Preserve partial multi-cloud synchronization when an isolated test filesystem
+  backend fails with IOException. Only the synthetic filesystem providers use
+  this classification; unknown production I/O failures still fail closed.
+- Repeat failing protocol-test case identifiers next to the final test summary
+  so a long console log cannot obscure the cause of a failed Windows build.
+
+### Tests
+
+- Add classification regressions for CAS and non-CAS test transports and a
+  negative assertion that unclassified production I/O cannot bypass safety.
+- Retain the full end-to-end ProtocolTests partial-publication/recovery scenario.
+
+## [8.0.0] - 2026-11-14
+
+### Changed
+
+- Distinguish provider authentication, configuration, rate limiting, temporary
+  outages and genuine replication safety failures across Google Drive, Proton
+  Drive CLI, WebDAV, S3 and Cloudflare R2.
+- Isolate a provider authentication failure from the publication safety gate;
+  incompatible vault identities, conflicting CAS writes and corrupt version
+  metadata remain hard safety failures.
+- Keep local-only exponential retry counters, stop polling when operator action
+  is required, and allow explicit manual requests to override paused retries.
+- Parse Google OAuth error codes without writing provider response bodies,
+  access tokens or refresh tokens to state and logs.
+- After a successful Google login, retain cursors/history and require a full
+  provider safety sweep before publishing again.
+- Localize actionable cloud error messages and restore cloud login prompts.
+
+### Tests
+
+- Add CloudResilienceTests with provider/status classification matrices,
+  OAuth sanitization, backoff bounds, state persistence compatibility,
+  paused-worker wakeups, isolation, safety-gate and recovery assertions.
+- Include CloudResilienceTests in mandatory Windows build and source audit.
+
 ## [7.2.4] - 2026-11-14
 
 ### Changed

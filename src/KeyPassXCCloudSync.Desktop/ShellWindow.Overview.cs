@@ -258,7 +258,7 @@ internal sealed partial class ShellWindow : Window
         _pollCountdownLabels.Add((countdown,cloud.Id));
         Grid.SetColumn(countdown,1);pollLine.Children.Add(countdown);
         details.Children.Add(pollLine);
-        if(status?.Error is {Length:>0} error)details.Children.Add(Muted(UiErrorDisplay.Present(error),11));
+        if(status?.Error is {Length:>0})details.Children.Add(Muted(UiErrorDisplay.PresentCloud(status!),11));
         if(editable is not null && status?.SuggestedAction is {Length:>0} suggestion)
             details.Children.Add(Muted(UiErrorDisplay.Present(suggestion),11));
         Control? actions=null;
@@ -433,6 +433,8 @@ internal sealed partial class ShellWindow : Window
         if(failures.Length>0)
         {
             var failed=failures[0];
+            if(failed.Status.RetryPaused)
+                return failed.Name+": "+UiErrorDisplay.PresentCloud(failed.Status);
             return UiLang.T("Повторная попытка: ")+failed.Name+
                 Deadline(NextDue(failed.CloudId));
         }
@@ -1036,8 +1038,11 @@ internal sealed partial class ShellWindow : Window
             cloud.Account=address;
             _lastResult="Google подключён: "+address;
             if(await SaveCloudDraftAsync())
+            {
+                await engine.ResumeCloudAfterLoginAsync(cloud.CloudId);
                 await MessageDialog.Info(this,"Google Drive подключён",
                     "Аккаунт: "+address+"\nАвторизация сохранена.");
+            }
         }
         catch(Exception e){await MessageDialog.Info(this,"Ошибка авторизации Google",UiErrorDisplay.Present(e));}
         finally{_authenticating=false;RefreshCurrentPage();}

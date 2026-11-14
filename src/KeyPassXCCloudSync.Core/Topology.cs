@@ -437,7 +437,9 @@ internal static class TopologyCoordinator
             state.RemoteTopologyRevision>(cache?.Revision??0);
         if(!need)return(false,false);
         var seen=new List<(CloudOptions Cloud,TopologyDocument? Document,string? Token,bool CasReady)>();
-        var discovered=await ParallelCloudRunner.RunAsync(cfg.Clouds,async (cloud,token)=>
+        var eligible=cfg.Clouds.Where(c=>CloudErrorPolicy.MayAutoScan(state,
+            c.Name,c.CloudId,null)).ToArray();
+        var discovered=await ParallelCloudRunner.RunAsync(eligible,async (cloud,token)=>
         {
             if(!IsAuthorized(cloud))return (Cloud:cloud,Document:(TopologyDocument?)null,
                 Token:(string?)null,CasReady:false,Available:false,Error:(Exception?)null);
@@ -464,7 +466,14 @@ internal static class TopologyCoordinator
         },ct);
         foreach(var item in discovered)
         {
-            if(item.Error is not null)log.Warn("Topology read "+item.Cloud.Name+": "+item.Error.Message);
+            if(item.Error is not null)
+            {
+                var failure=CloudErrorPolicy.Classify(item.Cloud.Provider,item.Error);
+                if(failure.BlocksPublication)
+                    throw new SyncSafetyException("Unsafe topology observation from "+item.Cloud.Name+
+                        ": "+failure.SafeMessage);
+                log.Warn("Topology read "+item.Cloud.Name+": "+failure.SafeMessage);
+            }
             if(item.Available)seen.Add((item.Cloud,item.Document,item.Token,item.CasReady));
         }
         if(seen.Count==0)return(false,false);
@@ -562,8 +571,9 @@ internal static class TopologyCoordinator
         if(state.TopologyDisabled)return(false,false,86400);
         var now=DateTimeOffset.UtcNow;
         bool changed=force;
-        var due=cfg.Clouds.Where(cloud=>force ||
-            !state.NextCloudPollUtc.TryGetValue(cloud.CloudId,out var deadline) || deadline<=now).ToArray();
+        var due=cfg.Clouds.Where(cloud=>
+            CloudErrorPolicy.MayAutoScan(state,cloud.Name,cloud.CloudId,null) &&
+            (force || !state.NextCloudPollUtc.TryGetValue(cloud.CloudId,out var deadline) || deadline<=now)).ToArray();
         var probes=await ParallelCloudRunner.RunAsync(due,async (cloud,token)=>
         {
             if(!IsAuthorized(cloud))
@@ -604,19 +614,20 @@ internal static class TopologyCoordinator
             }
             if(probe.Unauthorized)
             {
-                status.State="NEEDS_AUTH";status.Error="Облако не авторизовано";
+                CloudErrorPolicy.RecordMissingCredentials(state,cloud,status,DateTimeOffset.UtcNow);
             }
             else if(probe.Error is not null)
             {
-                status.State="OFFLINE";status.Error="Проверка топологии: "+probe.Error.Message;
-                log.Warn("Paused topology poll "+cloud.Name+": "+probe.Error.Message);
+                CloudErrorPolicy.RecordFailure(state,cloud,status,probe.Error,
+                    cfg.RetrySeconds,DateTimeOffset.UtcNow);
+                log.Warn("Paused topology poll "+cloud.Name+": ["+status.ProblemCode+"] "+status.Error);
             }
             else
             {
                 state.V2Cursors.TryGetValue(cloud.CloudId,out var cursor);
                 if(probe.Revision?.StartsWith("unknown-",StringComparison.Ordinal)==true ||
                    probe.Revision!=cursor?.TopologyRevisionToken)changed=true;
-                status.State="TOPOLOGY_OK";status.Error=null;
+                status.State="TOPOLOGY_OK";CloudErrorPolicy.RecordSuccess(status);
             }
         }
         if(changed)state.TopologyRefreshNeeded=true;
@@ -625,9 +636,10 @@ internal static class TopologyCoordinator
         // version pointer. It also honors pending edits and remote removals.
         var result=await RunAsync(cfg,log,ct,force:changed,announceKdbxPointer:false);
         state=SyncStorage.LoadState(cfg.StateFile);
-        var earliest=cfg.Clouds.Select(c=>state.NextCloudPollUtc.TryGetValue(c.CloudId,out var d)
-            ?Math.Max(1,(int)Math.Ceiling((d-DateTimeOffset.UtcNow).TotalSeconds)):1)
-            .DefaultIfEmpty(60).Min();
+        var earliest=cfg.Clouds.Where(c=>CloudErrorPolicy.MayAutoScan(state,c.Name,c.CloudId,null))
+            .Select(c=>state.NextCloudPollUtc.TryGetValue(c.CloudId,out var d)
+                ?(int)Math.Clamp(Math.Ceiling((d-DateTimeOffset.UtcNow).TotalSeconds),1,86400):1)
+            .DefaultIfEmpty(86400).Min();
         return(result.Reload,result.Left,earliest);
     }
 

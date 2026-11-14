@@ -602,7 +602,9 @@ public sealed class V2Engine(AppOptions settings,SyncLog log,Action<string>? onA
             !File.Exists(settings.LocalFile) || state.LocalSha256 is null ||
             state.LocalFileStamp!=new FileInfo(settings.LocalFile).LastWriteTimeUtc.Ticks ||
             state.LocalFileLength!=new FileInfo(settings.LocalFile).Length);
-        bool fullScan=forceAll || localDirty || state.VaultId is null || state.Result is "NeverRun" or "CONFLICT" or "TOPOLOGY_CHANGED";
+        bool fullScan=forceAll || localDirty || state.VaultId is null ||
+            state.Result is "NeverRun" or "CONFLICT" or "TOPOLOGY_CHANGED" ||
+            state.Clouds.Values.Any(s=>s.RecoveryPending && !s.RetryPaused);
         var previousVersions=_versions.Count;
         var commonFirstVaultId=Guid.NewGuid().ToString("N");
         var scanned=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -652,29 +654,23 @@ public sealed class V2Engine(AppOptions settings,SyncLog log,Action<string>? onA
             var status=state.Clouds.TryGetValue(cloud.Name,out var previous)
                 ?previous:new ReplicaStatus();
             state.Clouds[cloud.Name]=status;
-            state.NextCloudPollUtc[cloud.CloudId]=DateTimeOffset.UtcNow.AddSeconds(
-                outcome.Error is null?cloud.PollSeconds:settings.RetrySeconds);
+            if(outcome.Error is null)
+                state.NextCloudPollUtc[cloud.CloudId]=DateTimeOffset.UtcNow.AddSeconds(cloud.PollSeconds);
             if(outcome.Engine is not null &&
                outcome.Engine.LastMetrics.TryGetValue(cloud.Name,out var measured))
                 LastMetrics[cloud.Name]=measured;
             if(outcome.Error is not null)
             {
-                // A failed transport can be retried independently. A safety
-                // violation discovered inside a scan must stop all publication:
-                // the coordinator must not treat a foreign vault as offline.
-                if(outcome.Error is SyncSafetyException)unsafeReplica=true;
-                status.State=outcome.Error.Message.Contains("401",StringComparison.OrdinalIgnoreCase) ||
-                    outcome.Error.Message.Contains("invalid_grant",StringComparison.OrdinalIgnoreCase)
-                    ?"AUTH_ERROR":"ERROR";
-                status.Error=outcome.Error.GetType().Name+": "+outcome.Error.Message;
-                status.LastCheckedUtc=DateTimeOffset.UtcNow;
-                log.Warn("V2 cloud "+cloud.Name+": "+outcome.Error.Message);
+                // A credential outage is not an integrity violation. Only the
+                // explicit safety class can prevent unrelated publications.
+                unsafeReplica|=CloudErrorPolicy.RecordFailure(state,cloud,status,
+                    outcome.Error,settings.RetrySeconds,DateTimeOffset.UtcNow);
+                log.Warn("V2 cloud "+cloud.Name+": ["+status.ProblemCode+"] "+status.Error);
                 return;
             }
             if(outcome.Replica is null || outcome.Snapshot is null || outcome.Engine is null)
             {
-                status.State="NEEDS_AUTH";status.Error="Требуется локальная авторизация";
-                status.LastCheckedUtc=DateTimeOffset.UtcNow;
+                CloudErrorPolicy.RecordMissingCredentials(state,cloud,status,DateTimeOffset.UtcNow);
                 return;
             }
             var shadow=outcome.Snapshot;
@@ -761,7 +757,8 @@ public sealed class V2Engine(AppOptions settings,SyncLog log,Action<string>? onA
             outcome.Replica.Cursor.LastScanElapsedMilliseconds=outcome.ElapsedMilliseconds;
             outcome.Replica.Cursor.LastSuccessfulScanUtc=DateTimeOffset.UtcNow;
             state.V2Cursors[cloud.CloudId]=outcome.Replica.Cursor;
-            status.State="BEHIND";status.Error=null;status.LastCheckedUtc=DateTimeOffset.UtcNow;
+            status.State="BEHIND";CloudErrorPolicy.RecordSuccess(status);
+            status.LastCheckedUtc=DateTimeOffset.UtcNow;
             active.Add(outcome.Replica);
             outcome.DetachReplica(); // The coordinator now owns the live store.
         }
@@ -779,11 +776,9 @@ public sealed class V2Engine(AppOptions settings,SyncLog log,Action<string>? onA
                         var status=state.Clouds.TryGetValue(result.Cloud.Name,out var old)
                             ?old:new ReplicaStatus();
                         state.Clouds[result.Cloud.Name]=status;
-                        status.State="ERROR";status.Error=e.GetType().Name+": "+e.Message;
-                        if(e is SyncSafetyException)unsafeReplica=true;
-                        status.LastCheckedUtc=DateTimeOffset.UtcNow;
-                        state.NextCloudPollUtc[result.Cloud.CloudId]=DateTimeOffset.UtcNow.AddSeconds(settings.RetrySeconds);
-                        log.Warn("V2 scan commit "+result.Cloud.Name+": "+e.Message);
+                        unsafeReplica|=CloudErrorPolicy.RecordFailure(state,result.Cloud,status,
+                            e,settings.RetrySeconds,DateTimeOffset.UtcNow);
+                        log.Warn("V2 scan commit "+result.Cloud.Name+": ["+status.ProblemCode+"] "+status.Error);
                     }
                     var ok=state.Clouds.TryGetValue(result.Cloud.Name,out var latest) &&
                         latest.State is not ("ERROR" or "AUTH_ERROR" or "NEEDS_AUTH");
@@ -800,18 +795,20 @@ public sealed class V2Engine(AppOptions settings,SyncLog log,Action<string>? onA
         {
             var now=DateTimeOffset.UtcNow;
             var dueClouds=settings.Clouds.Where(cloud=>
-                preparedScans is not null && !fullScan
+                CloudErrorPolicy.MayAutoScan(state,cloud.Name,cloud.CloudId,forceCloudIds) &&
+                (preparedScans is not null && !fullScan
                 ? preparedScans.ContainsKey(cloud.CloudId)
                 : CloudScanSchedule.IsDue(cloud.CloudId,
                     state.NextCloudPollUtc.TryGetValue(cloud.CloudId,out var due)?due:null,
-                    now,fullScan,forceCloudIds)).ToArray();
+                    now,fullScan,forceCloudIds))).ToArray();
             await RunScans(dueClouds);
             // Discovery in one replica triggers a parallel scan of all other
             // replicas before ANY local installation or KDBX publication.
             if(!fullScan && (_versions.Count!=previousVersions || active.Any(r=>r.WasChanged)))
                 fullScan=true;
             if(fullScan)
-                await RunScans(settings.Clouds.Where(c=>!scanned.Contains(c.Name)).ToArray());
+                await RunScans(settings.Clouds.Where(c=>!scanned.Contains(c.Name) &&
+                    CloudErrorPolicy.MayAutoScan(state,c.Name,c.CloudId,forceCloudIds)).ToArray());
             // Identity/metadata divergence is not an ordinary network timeout:
             // never publish to another replica while a verified incompatible
             // vault or immutable metadata collision is under investigation.
@@ -842,7 +839,7 @@ public sealed class V2Engine(AppOptions settings,SyncLog log,Action<string>? onA
                 else
                 {
                     var configured=ConfiguredCloudStatuses.Select(configuredNames,state);
-                    if(configured.Any(x=>x.Status.State is "ERROR" or "NEEDS_AUTH" or "AUTH_ERROR"))
+                    if(configured.Any(x=>x.Status.State is "ERROR" or "OFFLINE" or "NEEDS_AUTH" or "AUTH_ERROR"))
                         state.Result=configured.Any(x=>x.Status.State=="SYNCED")?"PARTIAL":"ERROR";
                 }
                 return;
@@ -930,15 +927,18 @@ public sealed class V2Engine(AppOptions settings,SyncLog log,Action<string>? onA
                     if(delivery.Error is null)
                     {
                         state.Clouds[r.Config.Name].State="SYNCED";
-                        state.Clouds[r.Config.Name].Error=null;
+                        CloudErrorPolicy.RecordSuccess(state.Clouds[r.Config.Name]);
                         state.Clouds[r.Config.Name].CurrentVersionId=head.VersionId;
                         success++;
                     }
                     else
                     {
-                        state.Clouds[r.Config.Name].State="ERROR";
-                        state.Clouds[r.Config.Name].Error=delivery.Error.GetType().Name+": "+delivery.Error.Message;
-                        log.Warn("V2 publish "+r.Config.Name+": "+delivery.Error.Message);
+                        unsafeReplica|=CloudErrorPolicy.RecordFailure(state,r.Config,
+                            state.Clouds[r.Config.Name],delivery.Error,settings.RetrySeconds,
+                            DateTimeOffset.UtcNow);
+                        log.Warn("V2 publish "+r.Config.Name+": ["+
+                            state.Clouds[r.Config.Name].ProblemCode+"] "+
+                            state.Clouds[r.Config.Name].Error);
                     }
                     // Display the completed global outcome immediately once
                     // every configured cloud confirms THIS version; don't wait
@@ -952,6 +952,12 @@ public sealed class V2Engine(AppOptions settings,SyncLog log,Action<string>? onA
                     }
                     PublishIntermediateState(state);
                 },ct);
+            if(unsafeReplica)
+            {
+                state.Result="ERROR";
+                state.Error="A replication integrity or concurrency failure was detected";
+                return;
+            }
             state.Conflict=false;state.ConflictVersionIds=[];
             var confirmed=ConfiguredCloudStatuses.AllConfirmedAtLocalHead(configuredNames,state);
             var anyConfirmed=ConfiguredCloudStatuses.Select(configuredNames,state)

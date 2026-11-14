@@ -10,7 +10,7 @@ From a Windows terminal in the source root:
 .\build.bat
 ```
 
-The entry-point preflight validates the syntax of every PowerShell build script before executing it. This runs all mandatory source and package checks, compiles the application, executes all ten C# test executables, and publishes the Windows NativeAOT program. The build stops when any stage fails. The executable is published only after the automated tests succeed.
+The entry-point preflight validates the syntax of every PowerShell build script before executing it. This runs all mandatory source and package checks, compiles the application, executes all twelve C# test executables, and publishes the Windows NativeAOT program. The build stops when any stage fails. The executable is published only after the automated tests succeed.
 
 To run the complete test suite without creating a NativeAOT executable:
 
@@ -66,6 +66,7 @@ A nonzero process exit code, any `[FAIL]` line, or a suite that reports **zero**
 | CloudNameTests | Display-name validation, configuration paths and Proton executable discovery |
 | ParallelTests | Concurrency limits, cancellation and stable result ordering |
 | CloudStatusTests | Live connection selection versus stale cached status |
+| CloudResilienceTests | Provider failure isolation, OAuth error safety, retries, restart compatibility and recovery |
 | UiSmokeTests | Headless window hierarchy, theming, artwork, fonts and navigation |
 
 ## Tests using real providers

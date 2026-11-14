@@ -25,9 +25,19 @@ internal sealed class WindowsCliRunner : IPlatformCliRunner
             var stderr=process.StandardError.ReadToEndAsync(timeout.Token);
             await process.WaitForExitAsync(timeout.Token);
             var output=await stdout;
-            _=await stderr;
+            var diagnostic=await stderr;
             if(process.ExitCode!=0)
+            {
+                // Classify only known authentication phrases. Never log or
+                // propagate raw stderr: it can contain sensitive CLI output.
+                if(diagnostic.Contains("not logged in",StringComparison.OrdinalIgnoreCase) ||
+                   diagnostic.Contains("login required",StringComparison.OrdinalIgnoreCase) ||
+                   diagnostic.Contains("session expired",StringComparison.OrdinalIgnoreCase) ||
+                   diagnostic.Contains("authentication required",StringComparison.OrdinalIgnoreCase))
+                    throw new CloudTransportException("PROTON_AUTH",CloudFailureKind.Authentication,
+                        "Proton Drive CLI session requires login");
                 throw new IOException($"Proton Drive CLI operation failed (exit {process.ExitCode}); consult Proton CLI logs");
+            }
             return output;
         }
         catch

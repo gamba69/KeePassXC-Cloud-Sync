@@ -20,7 +20,8 @@ public sealed class ProtonDriveStore : IRemoteStore
         if(!File.Exists(_exe))throw new FileNotFoundException("Official Proton Drive CLI not found",_exe);
         _root=cfg.ProtonRootPath.TrimEnd('/');
         if(_root!=ProtonConfiguration.Root)
-            throw new SyncSafetyException("Proton root must be /my-files");
+            throw new CloudTransportException("CONFIGURATION",CloudFailureKind.Configuration,
+                "Proton root must be /my-files");
     }
     private static string[] Components(string path)
     {

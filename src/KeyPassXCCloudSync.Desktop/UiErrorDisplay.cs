@@ -13,7 +13,51 @@ internal static class UiErrorDisplay
     };
 
     internal static string Present(Exception error)
-        => Present(error.GetType().Name+": "+error.Message);
+        => error is CloudTransportException transport
+            ?PresentCloud(new ReplicaStatus{ProblemCode=transport.Code,Error=transport.Message})
+            :Present(error.GetType().Name+": "+error.Message);
+
+    internal static string PresentCloud(ReplicaStatus status)
+    {
+        var detail=status.ProblemCode switch
+        {
+            "OAUTH_INVALID_GRANT" => L("Токен Google истёк или отозван. Повторно войдите в аккаунт.",
+                "Термін дії токена Google минув або його відкликано. Увійдіть знову.",
+                "Google token expired or was revoked. Sign in again."),
+            "OAUTH_INVALID_CLIENT" or "OAUTH_CONFIGURATION" => L(
+                "Google OAuth: проверьте настройки клиента.",
+                "Google OAuth: перевірте налаштування клієнта.",
+                "Google OAuth: check client configuration."),
+            "OAUTH_ACCESS_DENIED" => L("Google отклонил доступ. Войдите повторно.",
+                "Google відхилив доступ. Увійдіть повторно.",
+                "Google denied access. Sign in again."),
+            "PROTON_AUTH" => L("Сессия Proton истекла. Повторно войдите через CLI.",
+                "Сеанс Proton завершився. Увійдіть знову через CLI.",
+                "Proton session expired. Sign in again through the CLI."),
+            "PROTON_CLI_MISSING" => L("Не найден Proton Drive CLI. Проверьте путь.",
+                "Не знайдено Proton Drive CLI. Перевірте шлях.",
+                "Proton Drive CLI not found. Check executable path."),
+            "AUTH_REQUIRED" => L("Доступ отклонён. Проверьте учётные данные и права.",
+                "Доступ відхилено. Перевірте облікові дані та права.",
+                "Access denied. Check credentials and permissions."),
+            "CONFIGURATION" or "CREDENTIALS_MISSING" => L(
+                "Ошибка настройки облака. Проверьте параметры подключения.",
+                "Помилка налаштування хмари. Перевірте параметри підключення.",
+                "Cloud configuration error. Check connection settings."),
+            "RATE_LIMIT" => L("Облако ограничило запросы. Повтор будет позже.",
+                "Хмара обмежила запити. Повторна спроба буде пізніше.",
+                "Cloud rate limit reached. Retrying later."),
+            "TEMPORARY" or "OAUTH_TEMPORARY" => L(
+                "Временная ошибка подключения. Повтор будет автоматически.",
+                "Тимчасова помилка з’єднання. Повторна спроба буде автоматично.",
+                "Temporary connection failure. Automatic retry scheduled."),
+            "SAFETY" => L("Проверка безопасности остановила опасную операцию: ",
+                "Перевірка безпеки зупинила небезпечну операцію: ",
+                "Safety check stopped an unsafe operation: ")+Present(status.Error),
+            _ => Present(status.Error)
+        };
+        return detail;
+    }
 
     internal static string Present(string? raw)
     {

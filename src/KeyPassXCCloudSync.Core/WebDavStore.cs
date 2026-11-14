@@ -15,7 +15,9 @@ public sealed class WebDavStore : IRemoteStore, IConditionalWriteStore
     {
         _root=new Uri(config.WebDavUrl.TrimEnd('/')+"/",UriKind.Absolute);
         var (user,password)=PlatformServices.Current.Secrets.Read(config.WebDavCredentialTarget);
-        if(string.IsNullOrWhiteSpace(user)) throw new SyncSafetyException("WebDAV credential username is empty");
+        if(string.IsNullOrWhiteSpace(user))
+            throw new CloudTransportException("CREDENTIALS_MISSING",CloudFailureKind.Configuration,
+                "WebDAV credential username is empty");
         _auth="Basic "+Convert.ToBase64String(Encoding.UTF8.GetBytes(user+":"+password));
         var handler=new HttpClientHandler { AllowAutoRedirect=false, UseCookies=false };
         _http=new HttpClient(handler) { Timeout=TimeSpan.FromSeconds(config.OperationTimeoutSec) };

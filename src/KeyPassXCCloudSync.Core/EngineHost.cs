@@ -168,6 +168,25 @@ internal sealed class EngineHost : IDisposable
         catch(ObjectDisposedException){}
     }
     internal void Wake(){Interlocked.Exchange(ref _forceNext,1);SignalWake();}
+    // Called only AFTER the browser OAuth handshake and saved account succeed.
+    // Preserve remote cursors, version graphs and local immutable backups.
+    internal async Task ResumeCloudAfterLoginAsync(string cloudId)
+    {
+        var cfg=_cfg;
+        if(cfg is null)return;
+        var cloud=cfg.Clouds.FirstOrDefault(c=>c.CloudId==cloudId);
+        if(cloud is null)return;
+        await Gate.WaitAsync();
+        try
+        {
+            var state=SyncStorage.LoadState(cfg.StateFile);
+            CloudErrorPolicy.ResumeAfterLogin(state,cloud.Name,cloud.CloudId,DateTimeOffset.UtcNow);
+            SyncStorage.SaveState(cfg.StateFile,state);
+            Updated?.Invoke(state);
+        }
+        finally{Gate.Release();}
+        RequestCloudScan(cloudId);
+    }
     // An explicit cloud request never silently forces an all-provider scan.
     // A discovered change may still require the coordinator to check peers.
     internal bool RequestCloudScan(string cloudId)

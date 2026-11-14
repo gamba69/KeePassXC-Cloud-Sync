@@ -19,16 +19,14 @@ internal static class PreflightAvailability
 {
     internal static bool IsTemporary(CloudOptions cloud,Exception error)
     {
-        if(error is TimeoutException or System.Net.Sockets.SocketException)return true;
-        if(error is HttpRequestException http)
-        {
-            if(http.StatusCode is null)return true; // DNS, TLS or connection failure.
-            var status=(int)http.StatusCode.Value;
-            return status is 401 or 403 or 408 or 429 || status>=500 && status<=599;
-        }
-        // The official Proton CLI reports failed processes through the Windows
-        // process adapter as IOException. Other filesystem IO errors are not
-        // automatically interpreted as a remote outage.
+        // A replica whose bytes or ancestry cannot be trusted must NEVER be
+        // treated as merely unreachable during startup validation.
+        if(error is SyncSafetyException)return false;
+        if(error is CloudTransportException or HttpRequestException or TimeoutException or
+           System.Net.Sockets.SocketException)
+            return !CloudErrorPolicy.Classify(cloud.Provider,error).BlocksPublication;
+        // The official Proton CLI emits a sanitized process failure; unrelated
+        // local filesystem exceptions are not automatically transport errors.
         return cloud.Provider=="ProtonDrive" && error is IOException &&
             error.Message.StartsWith("Proton Drive CLI",StringComparison.Ordinal);
     }

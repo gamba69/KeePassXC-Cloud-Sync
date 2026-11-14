@@ -25,22 +25,28 @@ public sealed class S3Store : IRemoteStore, IConditionalWriteStore
         if(!Uri.TryCreate(cfg.WebDavUrl,UriKind.Absolute,out var endpoint) ||
             endpoint.Scheme!=Uri.UriSchemeHttps || endpoint.UserInfo.Length>0 ||
             endpoint.Query.Length>0 || endpoint.Fragment.Length>0 || endpoint.AbsolutePath!="/")
-            throw new SyncSafetyException("S3: endpoint must be an HTTPS origin without a path, query or credentials");
+            throw new CloudTransportException("CONFIGURATION",CloudFailureKind.Configuration,
+                "S3: endpoint must be an HTTPS origin without a path, query or credentials");
         _endpoint=endpoint;
         _bucket=cfg.ProtonRootPath;
-        if(!ValidBucket(_bucket))throw new SyncSafetyException("S3: unsafe bucket name (DNS-compatible lowercase name required)");
+        if(!ValidBucket(_bucket))throw new CloudTransportException("CONFIGURATION",CloudFailureKind.Configuration,
+            "S3: invalid bucket name");
         _region=cfg.S3Region;
-        if(!ValidRegion(_region))throw new SyncSafetyException("S3: invalid signing region");
+        if(!ValidRegion(_region))throw new CloudTransportException("CONFIGURATION",CloudFailureKind.Configuration,
+            "S3: invalid signing region");
         if(cfg.Provider=="CloudflareR2" && _region!="auto")
-            throw new SyncSafetyException("Cloudflare R2 signing region must be auto");
+            throw new CloudTransportException("CONFIGURATION",CloudFailureKind.Configuration,
+                "Cloudflare R2 signing region must be auto");
         if(cfg.Provider=="CloudflareR2" && !(_endpoint.Host.EndsWith(".r2.cloudflarestorage.com",StringComparison.OrdinalIgnoreCase) ||
             _endpoint.Host.EndsWith(".eu.r2.cloudflarestorage.com",StringComparison.OrdinalIgnoreCase) ||
             _endpoint.Host.EndsWith(".us.r2.cloudflarestorage.com",StringComparison.OrdinalIgnoreCase) ||
             _endpoint.Host.EndsWith(".fedramp.r2.cloudflarestorage.com",StringComparison.OrdinalIgnoreCase)))
-            throw new SyncSafetyException("Cloudflare R2: use the official account endpoint");
+            throw new CloudTransportException("CONFIGURATION",CloudFailureKind.Configuration,
+                "Cloudflare R2: use the official account endpoint");
         (_accessKey,_secret)=PlatformServices.Current.Secrets.Read(cfg.WebDavCredentialTarget);
         if(_accessKey.Length==0 || _secret.Length==0 || _accessKey.Any(char.IsWhiteSpace))
-            throw new SyncSafetyException("S3: invalid Access Key ID / Secret Access Key");
+            throw new CloudTransportException("CREDENTIALS_MISSING",CloudFailureKind.Configuration,
+                "S3: invalid Access Key ID / Secret Access Key");
         _http=new HttpClient(new HttpClientHandler {AllowAutoRedirect=false,UseCookies=false})
         {Timeout=TimeSpan.FromSeconds(cfg.OperationTimeoutSec)};
     }

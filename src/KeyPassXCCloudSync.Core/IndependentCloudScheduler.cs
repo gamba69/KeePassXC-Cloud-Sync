@@ -60,10 +60,20 @@ internal sealed class IndependentCloudScheduler : IDisposable
             {
                 var now=DateTimeOffset.UtcNow;
                 var due=_nextDue(worker.Id)??now;
-                if(due<retryUntil)due=retryUntil;
-                var delay=due>now?due-now:TimeSpan.Zero;
-                // A user request is a wakeup, never a second concurrent run.
-                await worker.Signal.WaitAsync(delay,_stop.Token);
+                // Permanent authorization/configuration failures require an
+                // explicit wakeup; TimeSpan timers cannot represent MaxValue.
+                if(due==DateTimeOffset.MaxValue)
+                    await worker.Signal.WaitAsync(_stop.Token);
+                else
+                {
+                    if(due<retryUntil)due=retryUntil;
+                    var delay=due>now?due-now:TimeSpan.Zero;
+                    // WaitAsync timers have an upper bound. Long deadlines are
+                    // re-evaluated without creating an overflow or hot loop.
+                    if(delay>TimeSpan.FromDays(1))delay=TimeSpan.FromDays(1);
+                    if(!await worker.Signal.WaitAsync(delay,_stop.Token) &&
+                       due>DateTimeOffset.UtcNow)continue;
+                }
                 _stop.Token.ThrowIfCancellationRequested();
                 await _run(worker.Id,_stop.Token);
                 // If no durable deadline was advanced (for example because

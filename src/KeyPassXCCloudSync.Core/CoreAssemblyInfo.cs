@@ -11,3 +11,5 @@ using System.Runtime.CompilerServices;
 [assembly: System.Runtime.CompilerServices.InternalsVisibleTo("KeyPassXCCloudSync.CloudNameTests")]
 
 [assembly: System.Runtime.CompilerServices.InternalsVisibleTo("KeyPassXCCloudSync.ParallelTests")]
+[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("KeyPassXCCloudSync.CloudResilienceTests")]
+[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("KeyPassXCCloudSync.LocalizationTests")]

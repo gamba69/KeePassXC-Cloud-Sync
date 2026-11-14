@@ -10,5 +10,6 @@
     <Compile Include="../../src/KeyPassXCCloudSync.Desktop/UiLang.cs" Link="UiLang.cs" />
     <Compile Include="../../src/KeyPassXCCloudSync.Desktop/UiDiagnostics.cs" Link="UiDiagnostics.cs" />
     <Compile Include="../../src/KeyPassXCCloudSync.Desktop/UiErrorDisplay.cs" Link="UiErrorDisplay.cs" />
+    <ProjectReference Include="../../src/KeyPassXCCloudSync.Core/KeyPassXCCloudSync.Core.csproj" />
   </ItemGroup>
 </Project>

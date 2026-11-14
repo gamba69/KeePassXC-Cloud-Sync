@@ -933,6 +933,14 @@ internal static class V2Diagnostics
             }
             else Emit("[INFO] Тестовые данные сохранены: "+baseDir);
         }
+        // Console output can be long: repeat the failure identity immediately
+        // before the summary, without emitting a duplicate terminal FAIL case.
+        if(failed>0)
+        {
+            foreach(var failure in ReportLines.Where(line=>
+                line.StartsWith("[FAIL] ",StringComparison.Ordinal)))
+                Emit("[INFO] Failure recap: "+failure[7..]);
+        }
         Emit($"Summary: {passed} PASS, {failed} FAIL ("+(passed+failed)+" total)");
         SaveReport(options,safety?"safety":"local");
         return failed==0?0:1;

@@ -41,6 +41,10 @@ public sealed class ReplicaStatus
     public string? ProblemCode {get;set;}
     public string? SuggestedAction {get;set;}
     public DateTimeOffset? FailureSinceUtc {get;set;}
+    // Local-only retry state; adding optional fields preserves schema 2 data.
+    public int ConsecutiveFailures {get;set;}
+    public bool RetryPaused {get;set;}
+    public bool RecoveryPending {get;set;}
     public DateTimeOffset? LastCheckedUtc {get;set;}
     public string? CurrentSha256 {get;set;}
     public string? CurrentVersionId {get;set;}

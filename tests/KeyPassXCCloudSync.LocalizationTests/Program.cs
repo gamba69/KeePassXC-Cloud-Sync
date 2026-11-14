@@ -193,10 +193,33 @@ Record("network diagnostics localized",
        "Server response timed out (HttpRequestException)");
 Record("user-facing cloud errors use display adapter",
     File.ReadAllText(Path.Combine(desktop,"ShellWindow.Overview.cs"))
-       .Contains("UiErrorDisplay.Present(error)",StringComparison.Ordinal));
+       .Contains("UiErrorDisplay.PresentCloud(status!)",StringComparison.Ordinal));
 Record("modal errors use display adapter",
     File.ReadAllText(Path.Combine(desktop,"ShellWindow.cs"))
        .Contains("UiErrorDisplay.Present(message)",StringComparison.Ordinal));
+foreach(var language in new[]{"ru","uk","en"})
+{
+    UiLang.Use(language);
+    var expired=UiErrorDisplay.PresentCloud(new ReplicaStatus{
+        ProblemCode="OAUTH_INVALID_GRANT",Error="secret-must-not-appear"});
+    var expected=language switch
+    {
+        "ru"=>"Токен Google истёк или отозван. Повторно войдите в аккаунт.",
+        "uk"=>"Термін дії токена Google минув або його відкликано. Увійдіть знову.",
+        _=>"Google token expired or was revoked. Sign in again."
+    };
+    Record("Google OAuth failure localized and sanitized: "+language,expired==expected);
+    var limited=UiErrorDisplay.PresentCloud(new ReplicaStatus{
+        ProblemCode="RATE_LIMIT",Error="secret-must-not-appear"});
+    Record("rate limit localized without leaking raw response: "+language,
+        !limited.Contains("secret-must-not-appear",StringComparison.Ordinal) &&
+        !string.IsNullOrWhiteSpace(limited) &&
+        (language=="ru" || !limited.Contains("Облако",StringComparison.Ordinal)));
+    Record("OAuth exception is localized without exposing the provider message: "+language,
+        UiErrorDisplay.Present(new CloudTransportException("OAUTH_INVALID_GRANT",
+            CloudFailureKind.Authentication,"secret-must-not-appear"))==expected);
+}
+UiLang.Use("en");
 
 // Fail if the visible dialog or settings validator changes its wording without
 // updating RU/UK/EN. This would otherwise silently render Russian in other UIs.
@@ -240,9 +263,35 @@ foreach(var lang in new[]{"ru","uk","en"})
 
 // These strings originate in Core and must not bypass the display adapter.
 var overviewSource=File.ReadAllText(Path.Combine(desktop,"ShellWindow.Overview.cs"));
-Record("overview cloud errors and actions use presentation translation",
-    overviewSource.Contains("Muted(UiErrorDisplay.Present(error),11)",StringComparison.Ordinal) &&
-    overviewSource.Contains("Muted(UiErrorDisplay.Present(suggestion),11)",StringComparison.Ordinal));
+// Check the actual typed status adapter and the separately localized action.
+// These guards must follow intentional UI refactors, not pin a stale call site.
+Record("overview cloud errors use typed localized presentation",
+    Regex.IsMatch(overviewSource,
+        @"Muted\(\s*UiErrorDisplay\.PresentCloud\(\s*status!\s*\)\s*,\s*11\s*\)",
+        RegexOptions.CultureInvariant));
+Record("overview cloud actions use localized presentation",
+    Regex.IsMatch(overviewSource,
+        @"Muted\(\s*UiErrorDisplay\.Present\(\s*suggestion\s*\)\s*,\s*11\s*\)",
+        RegexOptions.CultureInvariant));
+// Verify actual messages independently from the source-shape guards.
+foreach(var (language,proton,credentials) in new[]
+{
+    ("ru","Сессия Proton истекла. Повторно войдите через CLI.",
+        "Доступ отклонён. Проверьте учётные данные и права."),
+    ("uk","Сеанс Proton завершився. Увійдіть знову через CLI.",
+        "Доступ відхилено. Перевірте облікові дані та права."),
+    ("en","Proton session expired. Sign in again through the CLI.",
+        "Access denied. Check credentials and permissions.")
+})
+{
+    UiLang.Use(language);
+    Record("Proton authorization error translated and redacted: "+language,
+        UiErrorDisplay.PresentCloud(new ReplicaStatus{
+            ProblemCode="PROTON_AUTH",Error="sensitive-provider-diagnostic"})==proton);
+    Record("generic authorization error translated and redacted: "+language,
+        UiErrorDisplay.PresentCloud(new ReplicaStatus{
+            ProblemCode="AUTH_REQUIRED",Error="sensitive-provider-diagnostic"})==credentials);
+}
 var shellSource=File.ReadAllText(Path.Combine(desktop,"ShellWindow.cs"));
 foreach(var full in new[]{"new LanguageChoice(\"ru\",\"Русский\",\"Русский\")",
     "new LanguageChoice(\"uk\",\"Українська\",\"Українська\")",

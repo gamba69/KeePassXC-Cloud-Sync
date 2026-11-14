@@ -17,17 +17,20 @@ public sealed class GoogleOAuth(Config cfg,HttpClient client)
     private string Secret()
     {
         if(string.IsNullOrWhiteSpace(cfg.GoogleClientId))
-            throw new SyncSafetyException("Google OAuth publisher client is not configured; use a custom Desktop client or build with publisher credentials");
+            throw new CloudTransportException("OAUTH_CONFIGURATION",CloudFailureKind.Configuration,
+                "Google OAuth client is not configured");
         if(string.IsNullOrWhiteSpace(cfg.GoogleClientSecretCredential))
         {
             if(!string.Equals(cfg.GoogleClientId,GoogleOAuthClientDefaults.ClientId,StringComparison.Ordinal) ||
                 string.IsNullOrWhiteSpace(GoogleOAuthClientDefaults.ClientSecret))
-                throw new SyncSafetyException("Google OAuth client secret missing; configure the publisher's client or your own Desktop client");
+                throw new CloudTransportException("OAUTH_CONFIGURATION",CloudFailureKind.Configuration,
+                    "Google OAuth client secret is missing");
             return GoogleOAuthClientDefaults.ClientSecret;
         }
         var credential=PlatformServices.Current.Secrets.Read(cfg.GoogleClientSecretCredential);
         if(!string.Equals(credential.User,cfg.GoogleClientId,StringComparison.Ordinal))
-            throw new SyncSafetyException("Google OAuth client ID differs from stored Desktop client secret");
+            throw new CloudTransportException("OAUTH_CONFIGURATION",CloudFailureKind.Configuration,
+                "Google OAuth client ID differs from stored Desktop client secret");
         return credential.Password;
     }
     public async Task<string> TokenAsync(CancellationToken ct)
@@ -38,7 +41,8 @@ public sealed class GoogleOAuth(Config cfg,HttpClient client)
             if(_accessToken!=null && _expires>DateTimeOffset.UtcNow.AddSeconds(90))return _accessToken;
             var stored=PlatformServices.Current.Secrets.Read(cfg.GoogleRefreshCredential);
             if(!string.Equals(stored.User,cfg.GoogleClientId,StringComparison.Ordinal))
-                throw new SyncSafetyException("Google refresh-token credential belongs to another OAuth client");
+                throw new CloudTransportException("OAUTH_CONFIGURATION",CloudFailureKind.Configuration,
+                    "Google refresh token belongs to another OAuth client");
             var refresh=stored.Password;
             using var doc=await ExchangeAsync(new Dictionary<string,string> {
                 ["client_id"]=cfg.GoogleClientId,["client_secret"]=Secret(),
@@ -72,13 +76,14 @@ public sealed class GoogleOAuth(Config cfg,HttpClient client)
         var seconds=root.TryGetProperty("expires_in",out var n)?n.GetInt32():3600;
         _expires=DateTimeOffset.UtcNow.AddSeconds(seconds);
     }
-    private async Task<JsonDocument> ExchangeAsync(Dictionary<string,string> fields,CancellationToken ct)
+    internal async Task<JsonDocument> ExchangeAsync(Dictionary<string,string> fields,CancellationToken ct)
     {
         using var request=new HttpRequestMessage(HttpMethod.Post,TokenEndpoint);
         request.Content=new FormUrlEncodedContent(fields);
         using var reply=await client.SendAsync(request,ct);
         if(!reply.IsSuccessStatusCode)
-            throw new SyncSafetyException($"Google OAuth failed (HTTP {(int)reply.StatusCode}); check credentials and consent");
+            throw GoogleOAuthFailure.FromResponse((int)reply.StatusCode,
+                await reply.Content.ReadAsStringAsync(ct));
         return JsonDocument.Parse(await reply.Content.ReadAsStreamAsync(ct));
     }
     private static async Task ReplyBestEffortAsync(Stream stream,bool success,string? acceptLanguage)
