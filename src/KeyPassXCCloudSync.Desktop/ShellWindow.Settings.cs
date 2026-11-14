@@ -164,6 +164,7 @@ internal sealed partial class ShellWindow : Window
             IsChecked=_draft.RememberWindowPosition};
         rememberWindow.IsCheckedChanged+=(_,_)=>_draft.RememberWindowPosition=rememberWindow.IsChecked==true;
         local.Children.Add(rememberWindow);
+        local.Children.Add(BuildUpdateSettings());
         local.Children.Add(Muted("Язык и тема интерфейса в верхней панели — тоже локальные настройки. Реквизиты облаков хранятся только на этом ПК.",11));
         var shared=Column(13);
         shared.Children.Add(Muted("Публикуются в topology.json и автоматически применяются на остальных компьютерах после получения обновления.",12));

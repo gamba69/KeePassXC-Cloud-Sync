@@ -19,6 +19,7 @@ internal sealed class IndependentCloudScheduler : IDisposable
     private readonly Action<string,Exception>? _onFailure;
     private readonly TimeSpan _retryDelay;
     private bool _disposed;
+    internal Task Completion {get;}
 
     internal IndependentCloudScheduler(IEnumerable<string> cloudIds,
         Func<string,DateTimeOffset?> nextDue,
@@ -35,6 +36,7 @@ internal sealed class IndependentCloudScheduler : IDisposable
             .ToDictionary(id=>id,id=>new Worker(id),StringComparer.Ordinal);
         foreach(var worker in _workers.Values)
             worker.Task=Task.Run(()=>LoopAsync(worker));
+        Completion=Task.WhenAll(_workers.Values.Select(worker=>worker.Task!));
     }
 
     internal bool Request(string cloudId)
@@ -86,7 +88,7 @@ internal sealed class IndependentCloudScheduler : IDisposable
         _stop.Cancel();
         // Worker continuations unwind asynchronously. Dispose their resources
         // only after cancellation has completed, never during WaitAsync.
-        _=Task.WhenAll(_workers.Values.Select(worker=>worker.Task!)).ContinueWith(completed=>
+        _=Completion.ContinueWith(completed=>
         {
             _=completed.Exception; // Observe any unexpected worker fault.
             foreach(var worker in _workers.Values)worker.Signal.Dispose();

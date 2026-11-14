@@ -10,12 +10,14 @@ namespace KeyPassXCCloudSync;
 internal sealed class WindowsDesktopPlatform : IPlatformServices, IDesktopHost, IDisposable
 {
     private readonly WindowsDatabaseLockService _locks=new();
+    private WindowsUpdateService? _updates;
     private readonly WindowsCredentialStore _credentials=new();
     private readonly WindowsAutostartService _autostart=new();
     private readonly WindowsPlatformPaths _paths=new();
     private readonly WindowsBrowser _browser=new();
     private readonly WindowsProcessLauncher _processes=new();
     public ISystemAppearance Appearance {get;}=new WindowsSystemAppearance();
+    public IUpdateService Updates=>_updates??=new WindowsUpdateService();
     public IInstanceCoordinator Instances {get;}=new WindowsInstanceCoordinator();
     public ISecretStore Secrets=>_credentials;
     public IPlatformChangeMonitoring Changes {get;}=new WindowsChangeMonitoring();
@@ -48,7 +50,7 @@ internal sealed class WindowsDesktopPlatform : IPlatformServices, IDesktopHost, 
     public string DiagnosticSymbolsName => "Segoe UI Symbol";
     public IDesktopNotifier CreateNotifier()=>new WindowsToastNotifier();
     public ITaskbarStatusIcons CreateTaskbarStatusIcons()=>new WindowsTaskbarStatusIcons();
-    public void Dispose()=>_locks.Dispose();
+    public void Dispose(){_updates?.Dispose();_locks.Dispose();}
 }
 internal sealed class WindowsSystemAppearance : ISystemAppearance
 {

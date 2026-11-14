@@ -1,5 +1,36 @@
 # User guide
 
+## Automatic updates
+
+The portable application checks published stable GitHub releases on startup and
+once per day. In **Settings / Updates**, automatic checks and background downloads
+can be enabled or disabled. Install a prepared update on exit (default), by
+accepting a restart prompt, or manually. **Check for updates** also initiates
+an on-demand check.
+
+For an immutable GitHub release the updater cryptographically verifies GitHub's
+signed release attestation using Sigstore and the pinned GitHub TUF root. If the
+release is not immutable, the user sees an explicit authenticity warning; the
+ZIP SHA-256 check is still required. If immutable verification fails, the update
+is rejected. No GitHub CLI or separate updater is required on the user's machine.
+
+Updates replace application-owned files only. KDBX databases, the local INI,
+user data, credentials and an external Proton CLI are never upgraded or deleted.
+The application completes in-flight cloud operations and closes before a
+short-lived copy of its EXE replaces runtime files. The previous version is
+retained for recovery if the update is interrupted; a later launch cleans the
+temporary files. Without write access to the installed directory, installation
+is refused rather than requesting elevation.
+
+## Obsolete application files
+
+Updates track the installed files per portable directory using SHA-256 in
+`%LOCALAPPDATA%\KeyPassXCCloudSync\updates\owned`. On later upgrades, runtime
+files removed from the new release are deleted **only** if the updater recorded
+them in a prior successful installation and their bytes are unchanged. Files
+from manual/legacy installations have no ownership record and are retained;
+changed files are also retained. Deleted files are backed up for rollback.
+
 ## Requirements and deployment
 
 - Windows x64, a working copy of KeePassXC or another application that can safely save `.kdbx` files, and sufficient disk space for local history and startup backups.

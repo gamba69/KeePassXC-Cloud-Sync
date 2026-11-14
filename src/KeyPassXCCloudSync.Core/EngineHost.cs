@@ -21,6 +21,8 @@ internal sealed class EngineHost : IDisposable
     private int _forceTopology=1;
     private readonly CloudRequestMailbox _cloudRequests=new();
     private IndependentCloudScheduler? _cloudScheduler;
+    private Task? _worker;
+    private readonly List<Task> _retiredSchedulers=new();
     private Task? _statisticsJob;
     private CancellationTokenSource? _statisticsCancel;
     internal CloudActivityTracker Activity {get;}=new();
@@ -67,7 +69,7 @@ internal sealed class EngineHost : IDisposable
             catch(Exception ex){ShowError("Не удалось открыть конфигурацию",ex.Message);}
         }
         _networkMonitor=PlatformServices.Current.Changes.WatchNetwork(Wake);
-        _=Task.Run(RunWithStartupBackupAsync);
+        _worker=Task.Run(RunWithStartupBackupAsync);
     }
     // Startup snapshots must finish before the very first synchronization cycle.
     // Run on a worker thread: a large database must never freeze the Avalonia UI.
@@ -136,7 +138,11 @@ internal sealed class EngineHost : IDisposable
             old?.Dispose();
         }
         else if(reservation is not null)ReleaseReservation(reservation);
-        _cloudScheduler?.Dispose();
+        if(_cloudScheduler is { } retired)
+        {
+            retired.Dispose();
+            _retiredSchedulers.Add(retired.Completion);
+        }
         _cloudScheduler=null;
         try{_statisticsCancel?.Cancel();}catch(ObjectDisposedException){}
         _cfg=cfg;
@@ -445,6 +451,32 @@ internal sealed class EngineHost : IDisposable
             }
         }
     }
+    // Update-only shutdown: do not release the KDBX mutex until every async
+    // worker, cloud scan, and statistics operation has actually finished.
+    internal async Task<bool> StopForUpdateAsync(TimeSpan timeout)
+    {
+        if(_disposed)return false;
+        _stop.Cancel();
+        _cloudScheduler?.Dispose();
+        try{_statisticsCancel?.Cancel();}catch(ObjectDisposedException){}
+        _watcher?.Dispose();
+        _networkMonitor?.Dispose();
+        var work=new List<Task>(_retiredSchedulers);
+        if(_worker is not null)work.Add(_worker);
+        if(_cloudScheduler is not null)work.Add(_cloudScheduler.Completion);
+        if(_statisticsJob is not null)work.Add(_statisticsJob);
+        try
+        {
+            await Task.WhenAll(work).WaitAsync(timeout);
+            if(!await Gate.WaitAsync(TimeSpan.FromSeconds(15)))return false;
+            Gate.Release();
+            Dispose();
+            return true;
+        }
+        catch(TimeoutException){return false;}
+        catch(OperationCanceledException){return false;}
+    }
+
     public void Dispose()
     {
         if(_disposed)return;_disposed=true;

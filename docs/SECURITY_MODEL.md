@@ -1,5 +1,19 @@
 # Security model
 
+## Software update trust boundary
+
+The update mechanism accepts only stable releases from the configured GitHub
+repository. It validates the ZIP SHA-256 and, if the release is immutable,
+verifies the Sigstore attestation using a GitHub-managed identity and a pinned
+TUF trust bootstrap, binding the signed repository ID, tag, Git ref and asset
+digest. Missing or invalid immutable attestations prevent installation.
+Mutable releases are explicitly marked as unverified (SHA-256 is an integrity
+check but not independent proof of origin); users may continue knowingly.
+The update helper operates only after the sync engine and file locks have
+finished; it never changes KDBX, cloud credentials, local state or Proton CLI.
+A staged file digest manifest and a recoverable installation journal defend
+against accidental partial replacement and tampering after download.
+
 ## Scope
 
 The application synchronizes an already encrypted KeePassXC KDBX database. It never attempts to decrypt the database or read password entries. The cryptographic protection and choice of master password/key file belong to KeePassXC and the user. The application can still observe and publish **encrypted vault bytes**, metadata, paths, remote objects and synchronization topology. Treat those as sensitive.

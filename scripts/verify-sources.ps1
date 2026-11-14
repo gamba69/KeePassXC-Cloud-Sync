@@ -82,7 +82,7 @@ try {
     Assert-Valid (Test-Path './tests/Directory.Build.targets') 'Every C# suite imports common test reporter'
     Assert-Valid ((Get-Content './scripts/build-windows.ps1' -Raw -Encoding UTF8) -match 'Invoke-TestSuite -Name \$test') 'Build executes all test suites through the checked reporter'
     foreach ($suite in @('Backup','Purge','Inventory','OAuthCallback','Protocol',
-                         'Localization','CloudName','Parallel','CloudStatus','UiSmoke')) {
+                         'Localization','CloudName','Parallel','CloudStatus','Update','UiSmoke')) {
         $program = "./tests/KeyPassXCCloudSync.${suite}Tests/Program.cs"
         Assert-Valid (Test-Path $program) "C# regression suite: ${suite}Tests"
         $source = Get-Content $program -Raw -Encoding UTF8

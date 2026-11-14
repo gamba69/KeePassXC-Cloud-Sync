@@ -16,6 +16,12 @@ internal static class WindowsHost
     {
         if(!OperatingSystem.IsWindows())
             throw new PlatformNotSupportedException("This distribution provides a Windows implementation only.");
+        if(args.Length==1 && args[0]=="--selftest-update")return 0;
+        if(args.Length>0 && args[0]=="--apply-update")
+            return WindowsUpdateService.ApplyUpdate(args);
+        if(args.Length>0 && args[0]=="--recover-update")
+            return WindowsUpdateService.ApplyRecovery(args);
+        if(WindowsUpdateService.LaunchInterruptedRecovery(args))return 0;
         using var platform=new WindowsDesktopPlatform();
         PlatformServices.Configure(platform);
         string? specifiedConfig=null;

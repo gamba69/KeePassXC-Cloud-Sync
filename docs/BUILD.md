@@ -1,5 +1,14 @@
 # Build and tests
 
+## Automatic update verification
+
+Windows CI executes the `UpdateTests` executable regression suite. The updater
+is implemented in the portable NativeAOT application, with Windows-specific
+filesystem/process handling in `Platforms/Windows/WindowsUpdateService.cs`.
+Immutable release attestations are issued by GitHub at manual publication time;
+no release signing secret, extra signature artifact or workflow publication
+trigger is required. Releases still contain exactly the ZIP and SHA-256 files.
+
 ## Prerequisites
 
 - Windows x64 build machine with Windows SDK toolchain suitable for .NET 10 NativeAOT.

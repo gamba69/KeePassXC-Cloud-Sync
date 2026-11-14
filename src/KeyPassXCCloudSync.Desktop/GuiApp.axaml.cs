@@ -8,7 +8,7 @@ using Avalonia.Threading;
 
 namespace KeyPassXCCloudSync;
 
-public sealed class GuiApp : Application
+public sealed partial class GuiApp : Application
 {
     // Headless CI tests create real visual trees, but MUST NOT start the sync engine.
     internal static bool UiSmokeMode {get;set;}
@@ -18,7 +18,8 @@ public sealed class GuiApp : Application
     internal bool HasRunningEngine=>Engine is not null;
     private TrayIcon? _tray;
     private NativeMenuItem? _trayStatus;
-    private NativeMenuItem? _trayOpen,_traySync,_trayExit;
+    private NativeMenuItem? _trayOpen,_traySync,_trayExit,_trayUpdate;
+    private bool _updateExitPending;
     internal IDesktopNotifier Notifications { get; private set; } = new UnsupportedDesktopNotifier();
     private readonly Dictionary<string, WindowIcon> _icons=new();
     private AppState? _lastTrayState;
@@ -117,6 +118,7 @@ public sealed class GuiApp : Application
                 MaybeNotifyAuth(state);
             });
             Engine.Start();
+            StartUpdates();
             Shell?.NavigateTo(0); // refresh the switch once Current is initialized
             DesktopPlatform.Current.BindActivation(()=>OpenWindow());
             if(_configured)
@@ -147,7 +149,9 @@ public sealed class GuiApp : Application
         _trayOpen=new NativeMenuItem(UiLang.T("Открыть KeyPassXC Cloud Sync"));_trayOpen.Click+=(_,_)=>OpenWindow();
         _traySync=new NativeMenuItem(UiLang.T("Синхронизировать сейчас"));_traySync.Click+=(_,_)=>{if(Engine?.SyncEnabled==true)Engine.Wake();};
         _trayExit=new NativeMenuItem(UiLang.T("Выход"));_trayExit.Click+=(_,_)=>_=RequestExitAsync();
-        menu.Items.Add(_trayOpen);menu.Items.Add(_traySync);
+        _trayUpdate=new NativeMenuItem(UiLang.T("Обновлений нет")){IsEnabled=false};
+        _trayUpdate.Click+=(_,_)=>_=InstallReadyUpdateAsync(true);
+        menu.Items.Add(_trayOpen);menu.Items.Add(_traySync);menu.Items.Add(_trayUpdate);
         menu.Items.Add(new NativeMenuItemSeparator());menu.Items.Add(_trayExit);
         _lastLightTaskbar=IsLightTaskbar();
         _tray=new TrayIcon{ Icon=NormalTrayIcon(),ToolTipText="KeyPassXC Cloud Sync "+BuildInfo.Version+" · "+UiLang.T("настройка"),Menu=menu};
@@ -170,6 +174,8 @@ public sealed class GuiApp : Application
         if(_trayOpen is not null)_trayOpen.Header=UiLang.T("Открыть KeyPassXC Cloud Sync");
         if(_traySync is not null)_traySync.Header=UiLang.T("Синхронизировать сейчас");
         if(_trayExit is not null)_trayExit.Header=UiLang.T("Выход");
+        if(_trayUpdate is not null)_trayUpdate.Header=UiLang.T(UpdateService.IsReady?
+            "Установить обновление…":"Обновлений нет");
         UpdateTray(_lastTrayState);
     }
     private void HideMainWindowToTray()
@@ -277,7 +283,7 @@ public sealed class GuiApp : Application
             _exitConfirmationOpen=false;
             // If the dialog was cancelled, restore only a previously visible main window.
             // A background/tray-only application must stay in the background.
-            if(!_allowExit && wasVisible)
+            if(!_allowExit && !_updateExitPending && wasVisible)
             {
                 shell.ShowInTaskbar=true;
                 if(shell.RememberWindowGeometry)
@@ -298,9 +304,26 @@ public sealed class GuiApp : Application
     }
     internal void Exit()
     {
+        if(_allowExit || _updateExitPending)return;
+        if(UpdateService.IsReady && UpdateService.Preferences.Installation=="exit")
+        {
+            _updateExitPending=true;
+            _=InstallOnExitAsync();
+            return;
+        }
+        CompleteExit();
+    }
+    private async Task InstallOnExitAsync()
+    {
+        await InstallReadyUpdateAsync(false);
+        if(!_allowExit)CompleteExit();
+    }
+    private void CompleteExit()
+    {
         _allowExit=true;
         Shell?.FlushWindowPlacement();
         _trayThemeTimer?.Stop();
+        _updatesTimer?.Stop();
         Engine?.Dispose();
         Notifications.Dispose();
         if(ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)desktop.Shutdown();

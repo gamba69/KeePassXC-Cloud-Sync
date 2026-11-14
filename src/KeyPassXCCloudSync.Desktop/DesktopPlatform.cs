@@ -18,6 +18,7 @@ internal interface IDesktopHost
 {
     ISystemAppearance Appearance {get;}
     IInstanceCoordinator Instances {get;}
+    IUpdateService Updates {get;}
     IDesktopNotifier CreateNotifier();
     ITaskbarStatusIcons CreateTaskbarStatusIcons();
     bool BackgroundRequested {get;}

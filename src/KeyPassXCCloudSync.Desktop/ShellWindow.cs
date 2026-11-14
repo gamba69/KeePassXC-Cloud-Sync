@@ -771,6 +771,7 @@ internal sealed partial class ShellWindow : Window
         _diagnosticsProgress=null;
         _diagnosticsActions=[];
         if(_page!=5)CancelProtectedDataScan();
+        _updateStatus=null;
         _pageContent.Content=_page switch
         {
             0=>BuildOverview(),1=>BuildClouds(),2=>BuildComputers(),3=>BuildSettings(),4=>BuildDiagnostics(),5=>BuildHistory(),_=>BuildAbout()

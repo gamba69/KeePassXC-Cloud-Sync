@@ -320,7 +320,7 @@ try {
         Write-Host '[SKIP] C# regression suites and UI smoke tests (-SkipTests); output is UNTESTED.' -ForegroundColor Yellow
     }
     else {
-    foreach ($test in @('BackupTests', 'PurgeTests', 'InventoryTests', 'OAuthCallbackTests', 'ProtocolTests', 'LocalizationTests', 'CloudNameTests', 'ParallelTests', 'CloudStatusTests', 'UiSmokeTests')) {
+    foreach ($test in @('BackupTests', 'PurgeTests', 'InventoryTests', 'OAuthCallbackTests', 'ProtocolTests', 'LocalizationTests', 'CloudNameTests', 'ParallelTests', 'CloudStatusTests', 'UpdateTests', 'UiSmokeTests')) {
         $path = "./tests/KeyPassXCCloudSync.$test/KeyPassXCCloudSync.$test.csproj"
         if (-not (Test-Path -LiteralPath $path)) { throw "STOP: missing test project $path" }
         if ($test -eq 'UiSmokeTests') {
