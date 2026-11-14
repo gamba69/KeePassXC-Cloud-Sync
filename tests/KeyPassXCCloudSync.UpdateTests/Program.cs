@@ -155,6 +155,48 @@ try
         "7.2.1",new string('a',40),zipName,new string('b',64)),
         "signed release from a different repository rejected");
 
+    // Regression: GitHub's authentic TUF trusted root uses bare DNS names for
+    // authority identifiers; Sigstore 1.1.1 requires absolute URI instances.
+    // The adapter runs on the already-verified TUF target, never on untrusted
+    // release metadata or the downloaded archive.
+    var githubTrustRoot="""
+        {"mediaType":"application/vnd.dev.sigstore.trustedroot+json;version=0.1",
+         "certificateAuthorities":[{"uri":"fulcio.githubapp.com",
+           "certChain":{"certificates":[{"rawBytes":"AQID"}]}}],
+         "timestampAuthorities":[{"uri":"timestamp.githubapp.com"}]}
+        """;
+    var githubTrust=GithubTrustRootCompatibility.ParseVerifiedTarget(
+        Encoding.UTF8.GetBytes(githubTrustRoot));
+    Check(githubTrust.CertificateAuthorities.Count==1 &&
+        githubTrust.CertificateAuthorities[0].Uri.AbsoluteUri=="https://fulcio.githubapp.com/",
+        "GitHub Fulcio hostname-only authority is supported");
+    Check(githubTrust.TimestampAuthorities.Count==1 &&
+        githubTrust.TimestampAuthorities[0].Uri.AbsoluteUri=="https://timestamp.githubapp.com/",
+        "GitHub timestamp hostname-only authority is supported");
+    Check(githubTrust.CertificateAuthorities[0].CertificateChain.Count==1 &&
+        githubTrust.CertificateAuthorities[0].CertificateChain[0].ToArray().SequenceEqual(new byte[]{1,2,3}),
+        "authority certificate bytes survive URI normalization");
+    var httpsTrust=GithubTrustRootCompatibility.ParseVerifiedTarget(Encoding.UTF8.GetBytes(
+        githubTrustRoot.Replace("fulcio.githubapp.com","https://fulcio.githubapp.com",
+            StringComparison.Ordinal)));
+    Check(httpsTrust.CertificateAuthorities[0].Uri.Scheme=="https",
+        "already absolute HTTPS authority is preserved");
+    foreach (var invalid in new[]{"other.githubapp.com","fulcio.example.com",
+        "http://fulcio.githubapp.com","file:///etc/passwd",""})
+        Rejected(()=>GithubTrustRootCompatibility.ParseVerifiedTarget(Encoding.UTF8.GetBytes(
+            githubTrustRoot.Replace("fulcio.githubapp.com",invalid,StringComparison.Ordinal))),
+            "unexpected trust-root authority URI rejected: "+invalid);
+    Rejected(()=>GithubTrustRootCompatibility.ParseVerifiedTarget(Encoding.UTF8.GetBytes(
+        githubTrustRoot.Replace("\"uri\":\"fulcio.githubapp.com\"",
+            "\"uri\":null",StringComparison.Ordinal))),
+        "null authority URI rejected");
+    Rejected(()=>GithubTrustRootCompatibility.ParseVerifiedTarget(Encoding.UTF8.GetBytes(
+        githubTrustRoot.Replace("\"uri\":\"fulcio.githubapp.com\"",
+            "\"uri\":\"fulcio.githubapp.com\",\"uri\":\"fulcio.githubapp.com\"",StringComparison.Ordinal))),
+        "duplicate authority URI rejected");
+    Rejected(()=>GithubTrustRootCompatibility.ParseVerifiedTarget(Encoding.UTF8.GetBytes("[]")),
+        "non-object trusted root rejected");
+
     Check(Encoding.UTF8.GetString(RawSnappy.Decode(new byte[]{3,8,97,98,99},100))=="abc",
         "raw Snappy literal");
     Check(Encoding.UTF8.GetString(RawSnappy.Decode(new byte[]{8,4,97,98,22,2,0},100))=="abababab",
@@ -428,6 +470,9 @@ try
         using var service=new WindowsUpdateService(provider,badRoot);
         await service.CheckAsync(true);
         Check(!service.IsReady && service.Snapshot.Status=="error",label);
+        if (label.StartsWith("immutable release",StringComparison.Ordinal))
+            Check(service.Snapshot.Detail.Contains("GitHub release attestation verification failed",
+                StringComparison.Ordinal),"immutable release reports the verification stage");
     }
     await RunBad("missing immutable status fails closed",new ScriptedHandler(zipData,hash,releaseTag,null));
     await RunBad("mismatched API SHA fails closed",new ScriptedHandler(zipData,new string('0',64),releaseTag,false));

@@ -29,6 +29,8 @@
     <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.5" />
     <PackageReference Include="FluentIcons.Avalonia" Version="2.1.345" />
     <PackageReference Include="Sigstore" Version="1.1.1" />
+    <!-- Access the TUF-verified target before Sigstore's strict URI parser. -->
+    <PackageReference Include="Tuf" Version="1.1.1" />
     <!-- Pin the compatible SkiaSharp 4.155.0 + HarfBuzzSharp 14.4.0
          managed/native Windows family as specified by SkiaSharp.HarfBuzz.
          Avalonia.Skia 12.1.5 declares minimum, not maximum, package versions. -->

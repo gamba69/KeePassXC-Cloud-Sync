@@ -4,6 +4,39 @@ All notable application and repository changes are recorded here, newest first.
 This is the only release-history document. All other documentation describes
 only the latest application behavior.
 
+## [8.0.5] - 2026-11-14
+
+### Fixed
+
+- Align the protocol reference and security policy with the centralized 8.0.5
+  application version. The previous 8.0.4 update missed both files and caused
+  the mandatory Windows SourceAudit to fail before compilation.
+- Preserve the immutable-release verification changes and regression tests from
+  8.0.4 without modifying synchronization or updater runtime behavior.
+
+### Validation
+
+- Keep the existing mandatory SourceAudit version checks for README, protocol,
+  security policy and changelog; review all current-version documentation.
+
+## [8.0.4] - 2026-11-14
+
+### Fixed
+
+- Correct immutable GitHub release verification with Sigstore 1.1.1: GitHub's
+  signed trusted-root authority identifiers are hostnames, whereas the library
+  requires absolute URIs. Canonicalize only the two known GitHub authority
+  identifiers after authenticated TUF target retrieval.
+- Retain mandatory TUF metadata and target verification, certificate identity,
+  signed timestamps, release attestation and ZIP digest checks. Verification
+  failures still block installation; errors now identify the attestation stage.
+
+### Tests
+
+- Add positive and negative regression cases for GitHub's hostname-only Fulcio
+  and timestamp authority identifiers, unexpected hosts, insecure schemes,
+  malformed trust roots and preserved certificate key material.
+
 ## [8.0.3] - 2026-11-14
 
 ### Fixed

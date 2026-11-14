@@ -7,6 +7,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Sigstore;
+using Tuf;
 
 namespace KeyPassXCCloudSync;
 
@@ -167,8 +168,18 @@ internal sealed class WindowsUpdateService : IUpdateService
                     ?digest.GetString():null;
                 ReleaseUpdatePolicy.VerifyChecksum(zipPath,checksum,zipName,expectedDigest);
                 if (immutable)
-                    await VerifyImmutableReleaseAsync(tag,zipName,
-                        ReleaseUpdatePolicy.HashFile(zipPath),cancellationToken);
+                {
+                    try
+                    {
+                        await VerifyImmutableReleaseAsync(tag,zipName,
+                            ReleaseUpdatePolicy.HashFile(zipPath),cancellationToken);
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        throw new InvalidDataException(
+                            "GitHub release attestation verification failed: " + ex.Message,ex);
+                    }
+                }
                 ReleaseUpdatePolicy.ExtractVerifiedArchive(zipPath,Path.Combine(directory,"payload"));
                 WritePayloadManifest(directory);
                 if (!immutable) File.WriteAllText(Path.Combine(directory,"unverified.txt"),"mutable");
@@ -263,8 +274,22 @@ internal sealed class WindowsUpdateService : IUpdateService
         if (!string.Equals(Convert.ToHexString(SHA256.HashData(bootstrap)),TufBootstrapSha256,
             StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("GitHub TUF bootstrap does not match its pinned digest.");
-        using var trust=new TufTrustRootProvider(new Uri("https://tuf-repo.github.com/"),
-            new TufTrustRootProviderOptions{CustomTrustedRoot=bootstrap});
+        // GitHub's signed trusted_root.json uses bare DNS names for its Fulcio
+        // and TSA authority URI fields. Sigstore 1.1.1 rejects them as relative
+        // URIs. Fetch and authenticate the target with the same TUF client that
+        // its trust-root provider uses, then adapt only those known names.
+        var tufUrl=new Uri("https://tuf-repo.github.com/");
+        using var tuf=new TufClient(new TufClientOptions
+        {
+            MetadataBaseUrl=tufUrl,
+            TargetsBaseUrl=new Uri(tufUrl,"targets/"),
+            TrustedRoot=bootstrap
+        });
+        var target=await tuf.GetTargetAsync("trusted_root.json",ct);
+        if (target.Metadata.Expires<=DateTimeOffset.UtcNow)
+            throw new InvalidDataException("GitHub TUF trusted-root metadata is expired.");
+        var trust=new InMemoryTrustRootProvider(
+            GithubTrustRootCompatibility.ParseVerifiedTarget(target.Content));
         var verifier=new SigstoreVerifier(trust);
         var policy=new VerificationPolicy
         {
