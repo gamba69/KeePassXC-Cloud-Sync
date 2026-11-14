@@ -7,21 +7,12 @@
 [![Windows CI](https://img.shields.io/badge/CI-Windows%20NativeAOT-informational)](.github/workflows/windows.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-**Version:** 7.1.16 · **Platform:** Windows x64 · **Framework:** .NET 10, Avalonia 12 · **License:** MIT.
+**Version:** 7.1.17 · **Platform:** Windows x64 · **Framework:** .NET 10, Avalonia 12 · **License:** MIT.
 
-> **Version 7 development source — not production qualified.** Version 7.1.16
-> retains the current synchronization engine and corrected manual draft-release
-> workflow. Root-level local `.patch` and `.zip` files are ignored by Git.
+> **Development source — not production qualified.**
 > The application source has **not** been compiled or tested with real clouds;
 > Windows .NET build, CI, safety tests and multi-PC acceptance are required
 > before a stable release.
-
-Version 7.1.16 refreshes the README and GitHub Pages hero collage: the
-fixed version badge in the upper-right corner is replaced with a cloud
-synchronization graphic. The rest of the artwork, including real application
-screenshots, remains unchanged. Synchronization behavior and release workflows
-are unchanged.
-
 
 KeyPassXC Cloud Sync synchronizes encrypted `.kdbx` files between multiple
 computers using independent cloud replicas. It does **not** decrypt the
@@ -114,6 +105,7 @@ by themselves. Review diagnostics before sharing them.
 - [User guide](docs/USER_GUIDE.md) — setup, providers, daily operation, status, backup, conflict handling and removal.
 - [Public GitHub Pages home page](docs/index.md) — product overview, screenshots and support links.
 - [Privacy policy](docs/privacy.md) — data handling statement for users and Google OAuth review.
+- [Changelog](CHANGELOG.md) — the single source for release-by-release changes.
 
 The GitHub Pages home and privacy pages use a custom **dark Cayman** stylesheet
 from [`docs/assets/css/style.scss`](docs/assets/css/style.scss). Jekyll applies

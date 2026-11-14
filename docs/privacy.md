@@ -8,7 +8,7 @@ permalink: /privacy/
 
 [Home]({{ '/' | relative_url }}) · [Project repository](https://github.com/gamba69/KeePassXC-Cloud-Sync)
 
-_Last updated for source version 7.1.15._
+_This policy describes the current development source._
 
 This Privacy Policy describes how **KeyPassXC Cloud Sync** handles user data.
 The project is an independent desktop application distributed from the GitHub

@@ -56,8 +56,14 @@ If a case fails, `[FAIL] Suite / case: reason` is printed and the overall comman
 
 ## Platform boundary checks
 
-`./scripts/verify-repository-privacy.ps1` rejects Git-tracked private files and common secret patterns before compilation. `./scripts/verify-sources.ps1` rejects native API or registry imports outside `Platforms/Windows`, direct `FileSystemWatcher` and `NetworkChange` use in Core, platform process launches from cloud transports, missing platform interfaces, non-English source comments, migration code and release-history documents. It also validates icon resources, protocol schema, English documentation structure and GitHub CI assets. This is **static validation** only; it does not prove runtime compatibility. A clean Windows build is mandatory for automated qualification. Tests using real provider credentials are run explicitly from the application Diagnostics tab; see [Testing and diagnostics](TESTING.md).
+`./scripts/verify-repository-privacy.ps1` rejects Git-tracked private files and common secret patterns before compilation. `./scripts/verify-sources.ps1` rejects native API or registry imports outside `Platforms/Windows`, direct `FileSystemWatcher` and `NetworkChange` use in Core, platform process launches from cloud transports, missing platform interfaces, non-English source comments, migration code and misplaced changelogs. It also validates icon resources, protocol schema, English documentation structure and GitHub CI assets. This is **static validation** only; it does not prove runtime compatibility. A clean Windows build is mandatory for automated qualification. Tests using real provider credentials are run explicitly from the application Diagnostics tab; see [Testing and diagnostics](TESTING.md).
 
 ### Version policy
 
-The source distribution uses **7.1.15** from `Directory.Build.props` and no per-release changelog or upgrade scripts. The remote protocol's schema identifier does not change when an application version changes. Any future changes to that remote schema would require explicit specification, security review and tests; they are not hidden inside a routine packaging change.
+The current application version is defined exclusively in `Directory.Build.props`.
+Release history is maintained only in the root [CHANGELOG.md](../CHANGELOG.md).
+All other documentation describes the latest source behavior, without
+version-by-version notes. The remote protocol's schema identifier does not
+change when the application version changes. Any change to that remote schema
+requires explicit specification, security review and tests; it is not hidden
+inside a routine packaging change.

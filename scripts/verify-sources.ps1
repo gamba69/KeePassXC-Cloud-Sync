@@ -17,16 +17,18 @@ try {
     Assert-Valid ($versionNodes.Count -eq 1) 'Exactly one centralized application version'
     $version = $versionNodes.Item(0).InnerText.Trim()
     Assert-Valid ($version -match '^[0-9]+\.[0-9]+\.[0-9]+$') "Centralized semantic application version: $version"
-    Assert-Valid ((Get-ChildItem -Recurse -File -Filter 'CHANGELOG*' | Measure-Object).Count -eq 0) 'No historical changelog files'
+    $changelogs = @(Get-ChildItem -Path . -Recurse -File -Filter 'CHANGELOG*')
+    Assert-Valid ($changelogs.Count -eq 1 -and
+                  $changelogs[0].FullName -eq (Join-Path $root 'CHANGELOG.md')) 'Only root CHANGELOG.md stores release history'
     Assert-Valid ((Get-ChildItem -Path './docs' -File -Filter '*.md' | Measure-Object).Count -ge 7) 'Complete English documentation set'
-    foreach ($document in @('README.md','LICENSE','SECURITY.md',
+    foreach ($document in @('README.md','CHANGELOG.md','LICENSE','SECURITY.md',
       'docs/USER_GUIDE.md','docs/CONFIGURATION.md','docs/ARCHITECTURE.md',
       'docs/PROTOCOL.md','docs/BUILD.md','docs/TROUBLESHOOTING.md','docs/SECURITY_MODEL.md')) {
         Assert-Valid (Test-Path -LiteralPath $document -PathType Leaf) "Repository document: $document"
     }
     Assert-Valid ((Get-Content './LICENSE' -Raw -Encoding UTF8).StartsWith('MIT License')) 'MIT license present'
-    $oldDocs = @(Get-ChildItem -Path . -Recurse -File -Include '*_RU.md','*_UA.md','*CHANGELOG*')
-    Assert-Valid ($oldDocs.Count -eq 0) 'No localized or historical project documentation'
+    $oldDocs = @(Get-ChildItem -Path . -Recurse -File -Include '*_RU.md','*_UA.md')
+    Assert-Valid ($oldDocs.Count -eq 0) 'No localized project documentation copies'
     foreach ($document in (Get-ChildItem . -Recurse -File -Include '*.md')) {
         $body = Get-Content -LiteralPath $document.FullName -Raw -Encoding UTF8
         Assert-Valid ($body -notmatch '[\u0400-\u04ff]') "English-only documentation: $($document.Name)"
@@ -88,6 +90,15 @@ try {
     }
     Assert-Valid ((Get-Content './README.md' -Raw -Encoding UTF8) -match ([regex]::Escape($version))) 'User README displays current version'
     Assert-Valid ((Get-Content './docs/PROTOCOL.md' -Raw -Encoding UTF8) -match ([regex]::Escape($version))) 'Protocol reference displays current app version'
+    Assert-Valid ((Get-Content './SECURITY.md' -Raw -Encoding UTF8) -match ([regex]::Escape($version))) 'Security policy displays current app version'
+    $history = Get-Content './CHANGELOG.md' -Raw -Encoding UTF8
+    Assert-Valid ($history -match ("(?m)^## \[" + [regex]::Escape($version) + "\]")) 'Changelog records current app version'
+    $docsWithoutHistory = @((Get-Item './README.md'), (Get-Item './SECURITY.md')) +
+        @(Get-ChildItem './docs' -File -Recurse -Filter '*.md')
+    foreach ($doc in $docsWithoutHistory) {
+        $docBody = Get-Content -LiteralPath $doc.FullName -Raw -Encoding UTF8
+        Assert-Valid ($docBody -notmatch "(?m)^#{1,6}\s+(?:Changelog|Release Notes|What's New|Version [0-9]+\.[0-9]+\.[0-9]+)\b") "No release history in $($doc.Name)"
+    }
     Assert-Valid (Test-Path './.github/workflows/windows.yml') 'Windows CI workflow included'
     Assert-Valid (-not (Test-Path './.github/workflows/release.yml')) 'No automatic release workflow on tag push'
     Assert-Valid (Test-Path './.github/workflows/release-assets.yml') 'GitHub manual asset build workflow included'
