@@ -7,6 +7,8 @@ namespace KeyPassXCCloudSync;
 internal sealed partial class ShellWindow
 {
     private TextBlock? _updateStatus;
+    private Button? _checkUpdatesButton, _installUpdateButton, _repairUpdateButton;
+    private bool _repairRunning;
     internal bool CanInstallUpdate => !_saving && !_testing && !_switchingSync;
 
     private Control BuildUpdateSettings()
@@ -47,23 +49,38 @@ internal sealed partial class ShellWindow
         root.Children.Add(modes);
         _updateStatus = Text("",12,false,Secondary);
         root.Children.Add(_updateStatus);
+        _checkUpdatesButton=Action("Проверить обновления",()=>_=CheckForUpdateAsync());
+        _installUpdateButton=Action("Установить сейчас",()=>_=ConfirmInstallUpdateAsync());
+        _repairUpdateButton=Action("Восстановить…",()=>_=RestoreCurrentVersionAsync());
+        root.Children.Add(Row(_checkUpdatesButton,_installUpdateButton,_repairUpdateButton));
         RefreshUpdateStatus();
-        var buttons = Row(
-            Action("Проверить обновления",()=>_=CheckForUpdateAsync()),
-            Action("Установить сейчас",()=>_=ConfirmInstallUpdateAsync()));
-        root.Children.Add(buttons);
         return root;
     }
 
     internal void RefreshUpdateStatus()
     {
         if (_updateStatus is null) return;
-        var state=DesktopPlatform.Current.Updates.Snapshot;
+        var updates=DesktopPlatform.Current.Updates;
+        var state=updates.Snapshot;
+        var offerRepair=UpdateActionPolicy.OfferRepair(state,updates.IsReinstallReady);
+        if(_checkUpdatesButton is not null)
+            _checkUpdatesButton.IsEnabled=!_repairRunning && state.Status!="checking";
+        if(_installUpdateButton is not null)
+        {
+            _installUpdateButton.IsVisible=!offerRepair;
+            _installUpdateButton.IsEnabled=!_repairRunning && updates.IsReady &&
+                !updates.IsReinstallReady && state.Status=="ready";
+        }
+        if(_repairUpdateButton is not null)
+        {
+            _repairUpdateButton.IsVisible=offerRepair;
+            _repairUpdateButton.IsEnabled=!_repairRunning && offerRepair;
+        }
         var key=state.Status switch
         {
             "checking"=>"Проверка обновлений…",
-            "available"=>"Доступна новая версия",
-            "ready"=>"Обновление готово",
+            "available"=>state.Reinstall?"Доступно восстановление":"Доступна новая версия",
+            "ready"=>state.Reinstall?"Восстановление готово":"Обновление готово",
             "current"=>"Установлена актуальная версия",
             "error"=>"Ошибка обновления",
             _=>"Обновления не проверялись"
@@ -79,6 +96,45 @@ internal sealed partial class ShellWindow
         RefreshUpdateStatus();
     }
 
+    private async Task RestoreCurrentVersionAsync()
+    {
+        var updates=DesktopPlatform.Current.Updates;
+        if(_repairRunning || !UpdateActionPolicy.OfferRepair(updates.Snapshot,updates.IsReinstallReady))
+            return;
+        if(updates.IsReinstallReady)
+        {
+            await ConfirmInstallUpdateAsync();
+            return;
+        }
+        if(!await MessageDialog.AskAction(this,UiLang.T("Восстановление приложения"),
+            UiLang.T("Скачать и проверить официальный релиз текущей версии с GitHub, затем восстановить файлы приложения? Базы KDBX, настройки и учётные данные сохранятся. Приложение перезапустится."),
+            UiLang.T("Восстановить"))) return;
+        _repairRunning=true;
+        RefreshUpdateStatus();
+        try
+        {
+            await _app.CheckForRepairAsync();
+            if(updates.IsReinstallReady)
+                await _app.InstallReadyUpdateAsync(true,userConfirmed:true);
+            else if(updates.IsReady)
+            {
+                // A newer release appeared after the user's repair confirmation.
+                // Request ordinary upgrade confirmation instead of silently installing it.
+                await ConfirmInstallUpdateAsync();
+            }
+            else if(updates.Snapshot.Status=="current")
+                await MessageDialog.Info(this,UiLang.T("Восстановление приложения"),
+                    UiLang.T("Текущий релиз недоступен на GitHub. Восстановление не выполнялось."));
+            // Error details remain visible in the Updates status area.
+        }
+        catch(Exception ex){ShowProblem(UiLang.T("Восстановление приложения"),ex.Message);}
+        finally
+        {
+            _repairRunning=false;
+            RefreshUpdateStatus();
+        }
+    }
+
     private async Task ConfirmInstallUpdateAsync()
     {
         var updates=DesktopPlatform.Current.Updates;
@@ -87,10 +143,15 @@ internal sealed partial class ShellWindow
             await MessageDialog.Info(this,"Обновления",UiLang.T("Нет подготовленного обновления."));
             return;
         }
-        var description=UiLang.T("Завершить текущие операции и перезапустить приложение для установки обновления?");
+        var repair=updates.IsReinstallReady;
+        var description=UiLang.T(repair
+            ? "Завершить текущие операции и восстановить файлы приложения? Приложение перезапустится."
+            : "Завершить текущие операции и перезапустить приложение для установки обновления?");
         if(updates.Snapshot.Unverified)
             description += "\n\n" + UiLang.T("GitHub Immutable Releases отключён: подлинность обновления не подтверждена.");
-        if(await MessageDialog.AskAction(this,UiLang.T("Установить обновление"),description,UiLang.T("Установить обновление")))
-            await _app.InstallReadyUpdateAsync(true);
+        if(await MessageDialog.AskAction(this,
+            UiLang.T(repair?"Восстановление приложения":"Установить обновление"),description,
+            UiLang.T(repair?"Восстановить":"Установить обновление")))
+            await _app.InstallReadyUpdateAsync(true,userConfirmed:true);
     }
 }

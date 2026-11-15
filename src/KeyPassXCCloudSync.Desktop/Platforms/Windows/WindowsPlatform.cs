@@ -28,6 +28,12 @@ internal sealed class WindowsDesktopPlatform : IPlatformServices, IDesktopHost, 
     public IExternalBrowser Browser=>_browser;
     public IPlatformProcessLauncher Processes=>_processes;
     public bool BackgroundRequested=>Program.BackgroundRequested;
+    public bool ConsumeReinstallRequest()
+    {
+        var requested=Program.ReinstallRequested;
+        Program.ReinstallRequested=false;
+        return requested;
+    }
     public void BindActivation(Action callback)=>Program.BindActivation(callback);
     public string RuntimeDescription=>RuntimeInformation.FrameworkDescription;
     public string ProcessMemoryUsage

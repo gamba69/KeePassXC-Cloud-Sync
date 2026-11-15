@@ -4,6 +4,48 @@ All notable application and repository changes are recorded here, newest first.
 This is the only release-history document. All other documentation describes
 only the latest application behavior.
 
+## [8.0.7] - 2026-11-15
+
+### Fixed
+
+- Route the one-shot `--reinstall` launch request through the Windows desktop
+  adapter instead of accessing the Windows entrypoint from shared Avalonia UI.
+- Restore the mandatory SourceAudit platform-boundary check without relaxing
+  it; preserve the same-version repair, confirmation and verification policy.
+
+### Tests
+
+- Add a regression for consuming the Windows-only maintenance request once,
+  including confirmation that the next read is false.
+
+## [8.0.6] - 2026-11-15
+
+### Added
+
+- Add a one-shot `--reinstall` maintenance option that permits the same published
+  version while retaining the normal ban on downgrades.
+- Reuse the verified GitHub immutable-release download and transactional
+  installer, with an explicit confirmation before reinstalling.
+- Distinguish repair from upgrading in update notifications, Settings,
+  tray actions and RU/UK/EN confirmation dialogs.
+- Turn the existing Install now button into Repair when the current version is
+  installed (or after a failed check); request consent before downloading and
+  verifying the published release.
+
+### Safety
+
+- Require GitHub Release Immutability and full attestation verification when
+  reinstalling the current version; never silently use a mutable release.
+- Never auto-reinstall on exit, even when normal updates install on exit.
+- Do not persist the `--reinstall` command in startup shortcuts or installer
+  restart arguments; reject a second-instance invocation explicitly.
+
+### Tests
+
+- Cover CLI parsing, allowed version ordering, verification invocation and
+  rejection, persistent-stage isolation, repair button policy and confirmation
+  gating using isolated updater fixtures.
+
 ## [8.0.5] - 2026-11-14
 
 ### Fixed

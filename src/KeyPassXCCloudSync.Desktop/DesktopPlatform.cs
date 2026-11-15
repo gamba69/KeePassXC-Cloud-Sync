@@ -22,6 +22,8 @@ internal interface IDesktopHost
     IDesktopNotifier CreateNotifier();
     ITaskbarStatusIcons CreateTaskbarStatusIcons();
     bool BackgroundRequested {get;}
+    // One-shot launch flags are consumed by the Windows adapter, not shared UI.
+    bool ConsumeReinstallRequest();
     void BindActivation(Action activateWindow);
     string RuntimeDescription {get;}
     string ProcessMemoryUsage {get;}

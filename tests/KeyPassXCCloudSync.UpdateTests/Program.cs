@@ -46,6 +46,49 @@ Check(ReleaseUpdatePolicy.ParseVersion("7.12.3")==new Version(7,12,3),"numeric t
 Check(ReleaseUpdatePolicy.IsNewer("7.10.0","7.9.99"),"numeric version ordering");
 Check(!ReleaseUpdatePolicy.IsNewer("7.2.0","7.2.0"),"same version excluded");
 Check(!ReleaseUpdatePolicy.IsNewer("7.1.99","7.2.0"),"downgrade excluded");
+Check(ReleaseUpdatePolicy.IsEligible("7.2.0","7.2.0",true),
+    "explicit reinstall permits the installed version");
+Check(!ReleaseUpdatePolicy.IsEligible("7.2.0","7.2.0",false),
+    "normal checks never reinstall the installed version");
+Check(ReleaseUpdatePolicy.IsEligible("7.2.1","7.2.0",false) &&
+    ReleaseUpdatePolicy.IsEligible("7.2.1","7.2.0",true),
+    "normal upgrades remain eligible in either mode");
+Check(!ReleaseUpdatePolicy.IsEligible("7.1.99","7.2.0",true),
+    "reinstall never permits a downgrade");
+var cliReinstall=WindowsHost.ParseNormalArguments(new[]{"--reinstall","--config","vault.ini"});
+Check(cliReinstall.Reinstall && cliReinstall.Show && !cliReinstall.Background &&
+    cliReinstall.Config=="vault.ini", "reinstall opens a visible, explicit instance");
+// Shared UI obtains the Windows-only launch request through the host boundary.
+// Consume-once semantics ensure that later checks cannot re-enter repair mode.
+using (var windowsHost=new WindowsDesktopPlatform())
+{
+    KeyPassXCCloudSync.Program.ReinstallRequested=true;
+    Check(windowsHost.ConsumeReinstallRequest() &&
+        !windowsHost.ConsumeReinstallRequest() &&
+        !KeyPassXCCloudSync.Program.ReinstallRequested,
+        "Windows host consumes the one-shot reinstall request exactly once");
+}
+var cliBackground=WindowsHost.ParseNormalArguments(new[]{"--background","--reinstall"});
+Check(cliBackground.Reinstall && cliBackground.Show && !cliBackground.Background,
+    "reinstall cannot be hidden in the tray");
+Check(!WindowsHost.ParseNormalArguments(new[]{"--background"}).Reinstall,
+    "ordinary launches do not enable maintenance mode");
+Check(WindowsHost.RecoveryStartupArguments(new[]{"--show","--reinstall","--config","vault.ini"})
+    .SequenceEqual(new[]{"--show","--config","vault.ini"}),
+    "recovery restarts never propagate the one-shot maintenance argument");
+foreach(var invalidArgs in new[]{new[]{"--reinstall","--reinstall"},
+    new[]{"--config"},new[]{"--config","--reinstall"},new[]{"--reupdate"},new[]{"--invalid"}})
+    Rejected(()=>WindowsHost.ParseNormalArguments(invalidArgs),
+        "invalid maintenance/launch argument rejected: "+string.Join(' ',invalidArgs));
+Check(UpdateActionPolicy.OfferRepair(new UpdateSnapshot("current"),false) &&
+    UpdateActionPolicy.OfferRepair(new UpdateSnapshot("error"),false),
+    "Repair action is offered after a current or failed update check");
+Check(UpdateActionPolicy.OfferRepair(new UpdateSnapshot("ready",Reinstall:true),true) &&
+    !UpdateActionPolicy.OfferRepair(new UpdateSnapshot("ready"),false) &&
+    !UpdateActionPolicy.OfferRepair(new UpdateSnapshot("available"),false) &&
+    !UpdateActionPolicy.OfferRepair(new UpdateSnapshot("checking"),false) &&
+    !UpdateActionPolicy.OfferRepair(new UpdateSnapshot("idle"),false),
+    "Repair action replaces Install only in appropriate states");
 foreach (var tag in new[]{"v7.2", "7.2.0-rc1","v7.2.0+local","../7.2.0","7.2.0/evil","7.2.0.1","2147483648.1.1",""})
     Rejected(()=>ReleaseUpdatePolicy.ParseVersion(tag),"reject malformed tag: "+tag);
 Check(ReleaseUpdatePolicy.ArchiveName("v7.2.1")=="KeyPassXCCloudSync-7.2.1-win-x64.zip",
@@ -221,6 +264,65 @@ try
         await current.CheckAsync(true);
         Check(!current.IsReady && current.Snapshot.Status=="current",
             "same installed release is not downloaded");
+    }
+    var reinstallRoot=Path.Combine(temp,"explicit-reinstall");
+    var verifyCalls=0;
+    using (var same=new WindowsUpdateService(
+        new ScriptedHandler(zipData,hash,installedTag,true),reinstallRoot,
+        (verifiedTag,archiveName,verifiedHash,ct)=>
+        {
+            verifyCalls++;
+            Check(verifiedTag==installedTag &&
+                archiveName==ReleaseUpdatePolicy.ArchiveName(installedTag) &&
+                verifiedHash.Equals(hash,StringComparison.OrdinalIgnoreCase),
+                "same-version verified release binds tag, archive name and SHA-256");
+            return Task.CompletedTask;
+        }))
+    {
+        await same.CheckAsync(true,reinstall:true);
+        Check(same.IsReady && same.IsReinstallReady && same.Snapshot.Reinstall &&
+            same.Snapshot.Status=="ready" && !same.Snapshot.Unverified && verifyCalls==1,
+            "explicit reinstall stages a verified immutable same-version package");
+        Rejected(()=>same.LaunchInstaller(true,"",false),
+            "reinstall cannot launch the installer without confirmation");
+        await same.CheckAsync(false);
+        Check(same.IsReinstallReady && same.Snapshot.Reinstall &&
+            same.Snapshot.Status=="ready" && verifyCalls==1,
+            "routine version checks preserve same-version confirmation gate");
+        await same.CheckAsync(true,reinstall:true);
+        Check(same.IsReinstallReady && verifyCalls==1,
+            "repeated explicit reinstall reuses verified staged bytes");
+    }
+    using (var newSession=new WindowsUpdateService(
+        new ScriptedHandler(zipData,hash,installedTag,true),reinstallRoot))
+        Check(!newSession.IsReady && !newSession.IsReinstallReady,
+            "reinstallation eligibility does not survive process restart");
+    using (var mutableSame=new WindowsUpdateService(
+        new ScriptedHandler(zipData,hash,installedTag,false),
+        Path.Combine(temp,"mutable-reinstall")))
+    {
+        await mutableSame.CheckAsync(true,reinstall:true);
+        Check(!mutableSame.IsReady && mutableSame.Snapshot.Status=="error" &&
+            mutableSame.Snapshot.Detail.Contains("immutable",StringComparison.OrdinalIgnoreCase),
+            "same-version mutable release is refused without a verifier downgrade");
+    }
+    using (var downgrade=new WindowsUpdateService(
+        new ScriptedHandler(zipData,hash,"1.0.0",true),
+        Path.Combine(temp,"downgrade-reinstall")))
+    {
+        await downgrade.CheckAsync(true,reinstall:true);
+        Check(!downgrade.IsReady && downgrade.Snapshot.Status=="current",
+            "explicit reinstall never downloads an older release");
+    }
+    using (var failsVerification=new WindowsUpdateService(
+        new ScriptedHandler(zipData,hash,installedTag,true),
+        Path.Combine(temp,"failed-reinstall"),
+        (_,_,_,_)=>throw new InvalidDataException("Synthetic attestation failure")))
+    {
+        await failsVerification.CheckAsync(true,reinstall:true);
+        Check(!failsVerification.IsReady && failsVerification.Snapshot.Status=="error" &&
+            failsVerification.Snapshot.Detail.Contains("attestation verification failed",StringComparison.Ordinal),
+            "failed immutable attestation blocks same-version reinstall");
     }
     var root=Path.Combine(temp,"updater");
     var pending=Path.Combine(root,"pending-"+releaseTag);

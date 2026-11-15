@@ -7,6 +7,7 @@ internal static class Program
 {
     internal static bool ShowRequested {get;set;}
     internal static bool BackgroundRequested {get;set;}
+    internal static bool ReinstallRequested {get;set;}
     internal static string ShortcutArguments {get;set;}="--show";
     private static Action? _activateWindow;
     private static int _activationPending;

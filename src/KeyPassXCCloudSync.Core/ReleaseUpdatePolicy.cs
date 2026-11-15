@@ -35,6 +35,14 @@ internal static class ReleaseUpdatePolicy
     internal static bool IsNewer(string candidate, string installed) =>
         ParseVersion(candidate).CompareTo(ParseVersion(installed)) > 0;
 
+    // Equal versions are eligible only for an explicit, one-shot reinstall.
+    // An older version is never eligible, regardless of the command line.
+    internal static bool IsEligible(string candidate, string installed, bool reinstall)
+    {
+        var comparison=ParseVersion(candidate).CompareTo(ParseVersion(installed));
+        return comparison>0 || (reinstall && comparison==0);
+    }
+
     internal static string ParseChecksum(string text, string expectedFileName)
     {
         var match = Regex.Match(text, @"\A([a-fA-F0-9]{64})  ([^\r\n]+)\r?\n?\z", RegexOptions.CultureInvariant);

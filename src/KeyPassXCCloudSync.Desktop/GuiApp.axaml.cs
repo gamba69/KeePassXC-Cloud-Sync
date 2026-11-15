@@ -150,7 +150,7 @@ public sealed partial class GuiApp : Application
         _traySync=new NativeMenuItem(UiLang.T("Синхронизировать сейчас"));_traySync.Click+=(_,_)=>{if(Engine?.SyncEnabled==true)Engine.Wake();};
         _trayExit=new NativeMenuItem(UiLang.T("Выход"));_trayExit.Click+=(_,_)=>_=RequestExitAsync();
         _trayUpdate=new NativeMenuItem(UiLang.T("Обновлений нет")){IsEnabled=false};
-        _trayUpdate.Click+=(_,_)=>_=InstallReadyUpdateAsync(true);
+        _trayUpdate.Click+=(_,_)=>_=ConfirmTrayUpdateAsync();
         menu.Items.Add(_trayOpen);menu.Items.Add(_traySync);menu.Items.Add(_trayUpdate);
         menu.Items.Add(new NativeMenuItemSeparator());menu.Items.Add(_trayExit);
         _lastLightTaskbar=IsLightTaskbar();
@@ -175,7 +175,8 @@ public sealed partial class GuiApp : Application
         if(_traySync is not null)_traySync.Header=UiLang.T("Синхронизировать сейчас");
         if(_trayExit is not null)_trayExit.Header=UiLang.T("Выход");
         if(_trayUpdate is not null)_trayUpdate.Header=UiLang.T(UpdateService.IsReady?
-            "Установить обновление…":"Обновлений нет");
+            (UpdateService.IsReinstallReady?"Переустановить…":"Установить обновление…"):
+            "Обновлений нет");
         UpdateTray(_lastTrayState);
     }
     private void HideMainWindowToTray()
@@ -305,7 +306,8 @@ public sealed partial class GuiApp : Application
     internal void Exit()
     {
         if(_allowExit || _updateExitPending)return;
-        if(UpdateService.IsReady && UpdateService.Preferences.Installation=="exit")
+        if(UpdateService.IsReady && !UpdateService.IsReinstallReady &&
+            UpdateService.Preferences.Installation=="exit")
         {
             _updateExitPending=true;
             _=InstallOnExitAsync();

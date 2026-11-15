@@ -14,6 +14,23 @@ release is not immutable, the user sees an explicit authenticity warning; the
 ZIP SHA-256 check is still required. If immutable verification fails, the update
 is rejected. No GitHub CLI or separate updater is required on the user's machine.
 
+In **Settings / Updates**, when no newer release is available the Install now
+button becomes **Repair…**. It can also retry after a failed update check without
+hiding the error. Repair first requests confirmation, then downloads and
+authenticates the published current release before reinstalling the application's
+own files. Cancel leaves the application unchanged. If a newer release appears
+instead, installation requires a separate normal upgrade confirmation.
+
+The same operation is available from the command line: exit the running
+application (including its tray instance) and launch
+`KeyPassXCCloudSync.exe --reinstall`. This one-shot command
+accepts the same version or a newer published release, but never downgrades. A
+same-version reinstall requires GitHub Release Immutability, full Sigstore/TUF
+verification and explicit confirmation; cancelling does not schedule an
+automatic reinstall on exit. The option is never written to autostart settings
+or passed to the newly installed executable on restart. It is not a cloud sync
+diagnostic and does not intentionally change database content.
+
 Updates replace application-owned files only. KDBX databases, the local INI,
 user data, credentials and an external Proton CLI are never upgraded or deleted.
 The application completes in-flight cloud operations and closes before a

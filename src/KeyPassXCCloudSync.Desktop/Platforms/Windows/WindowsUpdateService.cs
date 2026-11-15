@@ -26,18 +26,25 @@ internal sealed class WindowsUpdateService : IUpdateService
     private const long MaxZip = 256L * 1024 * 1024;
     private readonly HttpClient _client;
     private readonly SemaphoreSlim _gate = new(1,1);
+    private readonly Func<string,string,string,CancellationToken,Task> _verifyImmutable;
     private readonly string _root;
     private readonly string _settingsPath;
     private UpdateSnapshot _snapshot = new();
     private string? _readyDirectory;
+    private bool _readyIsReinstall;
     private bool _disposed;
 
-    internal WindowsUpdateService(HttpMessageHandler? handler = null, string? root = null)
+    // Internal verifier injection is for offline regression fixtures only.
+    // Production always uses the full Sigstore/TUF verifier.
+    internal WindowsUpdateService(HttpMessageHandler? handler = null, string? root = null,
+        Func<string,string,string,CancellationToken,Task>? verifyImmutable = null)
     {
         _root = root ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "KeyPassXCCloudSync", "updates");
         _settingsPath = Path.Combine(_root,"preferences.txt");
         _client = handler is null ? new HttpClient() : new HttpClient(handler);
+        _verifyImmutable = verifyImmutable ??
+            new Func<string,string,string,CancellationToken,Task>(VerifyImmutableReleaseAsync);
         _client.Timeout = TimeSpan.FromMinutes(3);
         _client.DefaultRequestHeaders.UserAgent.ParseAdd("KeyPassXCCloudSync-Updater/7.2");
         _client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
@@ -48,6 +55,7 @@ internal sealed class WindowsUpdateService : IUpdateService
     public UpdatePreferences Preferences { get; private set; }
     public UpdateSnapshot Snapshot => _snapshot;
     public bool IsReady => _readyDirectory is not null;
+    public bool IsReinstallReady => IsReady && _readyIsReinstall;
     public event Action? Changed;
     private void Publish(UpdateSnapshot snapshot) { _snapshot = snapshot; Changed?.Invoke(); }
 
@@ -106,30 +114,39 @@ internal sealed class WindowsUpdateService : IUpdateService
         }
     }
 
-    public async Task CheckAsync(bool manual, CancellationToken cancellationToken = default)
+    public async Task CheckAsync(bool manual, CancellationToken cancellationToken = default, bool reinstall = false)
     {
+        if (reinstall && !manual)
+            throw new ArgumentException("Reinstallation requires an explicit manual request.",nameof(reinstall));
         if (!manual && !Preferences.CheckAutomatically) return;
-        if (!await _gate.WaitAsync(0,cancellationToken)) return;
+        if (manual) await _gate.WaitAsync(cancellationToken);
+        else if (!await _gate.WaitAsync(0,cancellationToken)) return;
         try
         {
-            var cachedTag=_readyDirectory is not null ? _snapshot.Version : null;
+            // A later normal check cannot erase the explicit-confirmation requirement
+            // of a staged same-version reinstall.
+            var cached=IsReady && _snapshot.Status=="ready" ? _snapshot : null;
+            var cachedTag=cached?.Version;
             Publish(new UpdateSnapshot("checking"));
             using var release = await GetJsonAsync(Releases,cancellationToken);
             var json = release.RootElement;
             if (json.GetProperty("draft").GetBoolean() || json.GetProperty("prerelease").GetBoolean())
                 throw new InvalidDataException("GitHub did not return a stable release.");
             var tag = json.GetProperty("tag_name").GetString() ?? "";
-            if (!ReleaseUpdatePolicy.IsNewer(tag, BuildInfo.Version))
+            if (!ReleaseUpdatePolicy.IsEligible(tag, BuildInfo.Version, reinstall))
             {
-                if (_readyDirectory is null) Publish(new UpdateSnapshot("current"));
+                Publish(cached ?? new UpdateSnapshot("current"));
                 return;
             }
+            var reinstalling=!ReleaseUpdatePolicy.IsNewer(tag,BuildInfo.Version);
             bool immutable = json.GetProperty("immutable").ValueKind switch
             {
                 JsonValueKind.True => true,
                 JsonValueKind.False => false,
                 _ => throw new InvalidDataException("Missing GitHub immutability status.")
             };
+            if (reinstalling && !immutable)
+                throw new InvalidDataException("Reinstallation requires an immutable GitHub release.");
             var zipName=ReleaseUpdatePolicy.ArchiveName(tag);
             var shaName=ReleaseUpdatePolicy.ChecksumName(tag);
             JsonElement zip = default, sha = default;
@@ -143,20 +160,24 @@ internal sealed class WindowsUpdateService : IUpdateService
             var zipUrl=ReleaseAssetUrl(zip,tag,zipName);
             var shaUrl=ReleaseAssetUrl(sha,tag,shaName);
             var warning=immutable?"":"GitHub Release Immutability is disabled; authenticity is not cryptographically verified.";
-            if (_readyDirectory is not null && cachedTag==tag)
+            if (_readyDirectory is not null && cachedTag==tag && _readyIsReinstall==reinstalling)
             {
                 if (!immutable || !File.Exists(Path.Combine(_readyDirectory,"unverified.txt")))
                 {
-                    Publish(new UpdateSnapshot("ready",tag,warning,!immutable));
+                    Publish(new UpdateSnapshot("ready",tag,warning,!immutable,reinstalling));
                     return;
                 }
                 // A cached mutable download must never be promoted to an
                 // authenticated update merely because API metadata changed.
                 _readyDirectory=null;
+                _readyIsReinstall=false;
             }
-            Publish(new UpdateSnapshot("available",tag,warning,!immutable));
+            Publish(new UpdateSnapshot("available",tag,warning,!immutable,reinstalling));
             if (!Preferences.DownloadAutomatically && !manual) return;
             var directory=Path.Combine(_root,"pending-"+ReleaseUpdatePolicy.ParseVersion(tag).ToString(3));
+            // No stale ready state can authorize installation if staging fails.
+            _readyDirectory=null;
+            _readyIsReinstall=false;
             if (Directory.Exists(directory)) Directory.Delete(directory,true);
             Directory.CreateDirectory(directory);
             try
@@ -171,7 +192,7 @@ internal sealed class WindowsUpdateService : IUpdateService
                 {
                     try
                     {
-                        await VerifyImmutableReleaseAsync(tag,zipName,
+                        await _verifyImmutable(tag,zipName,
                             ReleaseUpdatePolicy.HashFile(zipPath),cancellationToken);
                     }
                     catch (Exception ex) when (ex is not OperationCanceledException)
@@ -187,7 +208,8 @@ internal sealed class WindowsUpdateService : IUpdateService
                 Directory.CreateDirectory(_root);
                 File.WriteAllText(Path.Combine(_root,"ready.txt"),tag);
                 _readyDirectory=directory;
-                Publish(new UpdateSnapshot("ready",tag,warning,!immutable));
+                _readyIsReinstall=reinstalling;
+                Publish(new UpdateSnapshot("ready",tag,warning,!immutable,reinstalling));
             }
             catch
             {
@@ -397,8 +419,11 @@ internal sealed class WindowsUpdateService : IUpdateService
         finally { if (File.Exists(probe)) File.Delete(probe); }
     }
 
-    public void LaunchInstaller(bool restart,string configPath,bool background)
+    public void LaunchInstaller(bool restart,string configPath,bool background,
+        bool confirmedReinstall = false)
     {
+        if (IsReinstallReady && !confirmedReinstall)
+            throw new InvalidDataException("Reinstallation requires explicit user confirmation.");
         ValidateInstallation();
         var stage=_readyDirectory??throw new InvalidOperationException("No verified update prepared.");
         if (File.ReadAllText(Path.Combine(stage,"verified.txt")).Trim()!=Snapshot.Version)
