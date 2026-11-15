@@ -150,6 +150,40 @@ try
       """;
     ReleaseUpdatePolicy.VerifySignedStatement(statement,"7.2.1",new string('a',40),zipName,new string('b',64));
     Check(true,"signed statement binds tag, ref SHA and asset digest");
+    // GitHub immutable releases now use the v0.2 release predicate. Retain
+    // backward compatibility with the older, equally strict v0.1 predicate.
+    var releaseV02=statement.Replace(
+        "https://in-toto.io/attestation/release/v0.1",
+        "https://in-toto.io/attestation/release/v0.2",StringComparison.Ordinal);
+    ReleaseUpdatePolicy.VerifySignedStatement(releaseV02,"7.2.1",
+        new string('a',40),zipName,new string('b',64));
+    Check(true,"GitHub release predicate v0.2 is verified against the same identities");
+    foreach(var badPredicate in new[]{"https://in-toto.io/attestation/release/v0.3",
+        "https://in-toto.io/attestation/release", "https://slsa.dev/provenance/v1",
+        "https://in-toto.io/attestation/release/v0.2/extra", ""})
+        Rejected(()=>ReleaseUpdatePolicy.VerifySignedStatement(releaseV02.Replace(
+            "https://in-toto.io/attestation/release/v0.2",badPredicate,
+            StringComparison.Ordinal),"7.2.1",new string('a',40),zipName,new string('b',64)),
+            "unrecognized or unrelated release predicate rejected: "+badPredicate);
+    Rejected(()=>ReleaseUpdatePolicy.VerifySignedStatement(releaseV02.Replace(
+        "\"predicateType\":\"https://in-toto.io/attestation/release/v0.2\"",
+        "\"predicateType\":null",StringComparison.Ordinal),
+        "7.2.1",new string('a',40),zipName,new string('b',64)),
+        "missing v0.2 predicate type is rejected");
+    Rejected(()=>ReleaseUpdatePolicy.VerifySignedStatement(releaseV02,
+        "7.2.2",new string('a',40),zipName,new string('b',64)),
+        "v0.2 release predicate cannot authorize another tag");
+    Rejected(()=>ReleaseUpdatePolicy.VerifySignedStatement(releaseV02,
+        "7.2.1",new string('c',40),zipName,new string('b',64)),
+        "v0.2 release predicate cannot authorize another Git ref");
+    Rejected(()=>ReleaseUpdatePolicy.VerifySignedStatement(releaseV02,
+        "7.2.1",new string('a',40),zipName,new string('c',64)),
+        "v0.2 release predicate cannot authorize a different ZIP digest");
+    Rejected(()=>ReleaseUpdatePolicy.VerifySignedStatement(releaseV02.Replace(
+        "\"repositoryId\":\"1454413194\"",
+        "\"repositoryId\":\"1\"",StringComparison.Ordinal),
+        "7.2.1",new string('a',40),zipName,new string('b',64)),
+        "v0.2 release predicate cannot authorize another repository ID");
     // GitHub Package-URL rules lowercase owner and repository name, while the
     // repository's display name contains uppercase letters. Both predicate and
     // subject must accept the canonical GitHub identity without relaxing tag,

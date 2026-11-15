@@ -4,6 +4,23 @@ All notable application and repository changes are recorded here, newest first.
 This is the only release-history document. All other documentation describes
 only the latest application behavior.
 
+## [8.0.9] - 2026-11-15
+
+### Fixed
+
+- Accept GitHub's signed immutable-release predicate `https://in-toto.io/attestation/release/v0.2`
+  alongside the previously supported `v0.1` format. Neither an unknown predicate
+  nor an unrelated attestation can authorize an update.
+- Keep mandatory Sigstore/TUF signature and timestamp verification, signed GitHub
+  release identity, repository numeric ID, exact tag, tag-ref SHA-1 and ZIP SHA-256
+  checks unchanged. No change to cloud synchronization or wire schema.
+
+### Tests
+
+- Test both permitted release predicate types with the same signed repository,
+  tag and archive identity checks; reject unsupported versions, unrelated types,
+  missing predicates, modified tag and changed ZIP hash for v0.2.
+
 ## [8.0.8] - 2026-11-15
 
 ### Fixed

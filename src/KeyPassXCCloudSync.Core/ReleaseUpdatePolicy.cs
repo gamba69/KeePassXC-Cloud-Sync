@@ -151,7 +151,11 @@ internal static class ReleaseUpdatePolicy
 
             if (JsonString(root,"_type") != "https://in-toto.io/Statement/v1")
                 throw new InvalidDataException("Signed release statement type does not match.");
-            if (JsonString(root,"predicateType") != "https://in-toto.io/attestation/release/v0.1")
+            // GitHub Immutable Releases issue v0.2 predicates. Retain v0.1 for
+            // older authenticated releases, but never accept arbitrary types.
+            if (JsonString(root,"predicateType") is not
+                ("https://in-toto.io/attestation/release/v0.1" or
+                 "https://in-toto.io/attestation/release/v0.2"))
                 throw new InvalidDataException("Signed release predicate type does not match.");
             if (!string.Equals(JsonString(predicate,"repository"),Repository,
                 StringComparison.OrdinalIgnoreCase))
