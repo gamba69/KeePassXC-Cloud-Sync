@@ -4,6 +4,23 @@ All notable application and repository changes are recorded here, newest first.
 This is the only release-history document. All other documentation describes
 only the latest application behavior.
 
+## [8.0.8] - 2026-11-15
+
+### Fixed
+
+- Accept canonical, case-insensitive GitHub repository names in signed release
+  predicates and package URLs, as required by the GitHub Package-URL definition.
+  The release tag, repository numeric ID, signed Git ref, ZIP asset name and
+  SHA-256 digest remain strictly bound to the authenticated attestation.
+- Report which signed release identity field mismatched instead of a single
+  ambiguous repository/ID/tag error. No update verification is bypassed.
+
+### Tests
+
+- Add signed release regression fixtures for lowercase GitHub PURLs and mixed
+  repository-name casing; reject changed package identity, tag, repository ID,
+  and modified artifact digests.
+
 ## [8.0.7] - 2026-11-15
 
 ### Fixed

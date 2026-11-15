@@ -124,6 +124,19 @@ internal static class ReleaseUpdatePolicy
         element.TryGetProperty(key, out var value) &&
         value.ValueKind == System.Text.Json.JsonValueKind.String ? value.GetString() : null;
 
+    // GitHub PURLs canonically lowercase both owner and repository. Repository
+    // identity is case-insensitive, but the release tag is case-sensitive.
+    // Reject qualifiers, subpaths, other PURL types and additional characters.
+    private static bool IsExpectedGitHubPurl(string? value, string tag)
+    {
+        const string prefix="pkg:github/";
+        if (value is null || !value.StartsWith(prefix,StringComparison.Ordinal)) return false;
+        var at=value.LastIndexOf('@');
+        return at>prefix.Length &&
+            string.Equals(value[prefix.Length..at],Repository,StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(value[(at+1)..],tag,StringComparison.Ordinal);
+    }
+
     internal static void VerifySignedStatement(string statement, string tag, string tagSha1,
         string archiveName, string archiveSha256)
     {
@@ -136,14 +149,19 @@ internal static class ReleaseUpdatePolicy
                 predicate.ValueKind != System.Text.Json.JsonValueKind.Object)
                 throw new InvalidDataException("Signed release predicate is missing or invalid.");
 
-            var expectedPurl = "pkg:github/" + Repository + "@" + tag;
-            if (JsonString(root,"_type") != "https://in-toto.io/Statement/v1" ||
-                JsonString(root,"predicateType") != "https://in-toto.io/attestation/release/v0.1" ||
-                JsonString(predicate,"tag") != tag ||
-                JsonString(predicate,"repository") != Repository ||
-                JsonString(predicate,"repositoryId") != RepositoryId ||
-                JsonString(predicate,"purl") != expectedPurl)
-                throw new InvalidDataException("Signed release repository, ID or tag does not match.");
+            if (JsonString(root,"_type") != "https://in-toto.io/Statement/v1")
+                throw new InvalidDataException("Signed release statement type does not match.");
+            if (JsonString(root,"predicateType") != "https://in-toto.io/attestation/release/v0.1")
+                throw new InvalidDataException("Signed release predicate type does not match.");
+            if (!string.Equals(JsonString(predicate,"repository"),Repository,
+                StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("Signed release repository name does not match.");
+            if (JsonString(predicate,"repositoryId") != RepositoryId)
+                throw new InvalidDataException("Signed release repository ID does not match.");
+            if (JsonString(predicate,"tag") != tag)
+                throw new InvalidDataException("Signed release tag does not match.");
+            if (!IsExpectedGitHubPurl(JsonString(predicate,"purl"),tag))
+                throw new InvalidDataException("Signed release package URL does not match.");
 
             if (!root.TryGetProperty("subject", out var subjects) ||
                 subjects.ValueKind != System.Text.Json.JsonValueKind.Array)
@@ -161,7 +179,7 @@ internal static class ReleaseUpdatePolicy
                     JsonString(digest,"sha256") == archiveSha256)
                     foundZip = true;
 
-                if (JsonString(subject,"uri") == expectedPurl &&
+                if (IsExpectedGitHubPurl(JsonString(subject,"uri"),tag) &&
                     string.Equals(JsonString(digest,"sha1"),tagSha1,StringComparison.OrdinalIgnoreCase))
                     foundTag = true;
             }

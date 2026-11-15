@@ -7,7 +7,7 @@
 [![Windows CI](https://img.shields.io/badge/CI-Windows%20NativeAOT-informational)](.github/workflows/windows.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-**Version:** 8.0.7 · **Platform:** Windows x64 · **Framework:** .NET 10, Avalonia 12 · **License:** MIT.
+**Version:** 8.0.8 · **Platform:** Windows x64 · **Framework:** .NET 10, Avalonia 12 · **License:** MIT.
 
 > **Development source — not production qualified.**
 > The application source has **not** been compiled or tested with real clouds;

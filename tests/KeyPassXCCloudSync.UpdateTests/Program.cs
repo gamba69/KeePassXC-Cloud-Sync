@@ -150,6 +150,43 @@ try
       """;
     ReleaseUpdatePolicy.VerifySignedStatement(statement,"7.2.1",new string('a',40),zipName,new string('b',64));
     Check(true,"signed statement binds tag, ref SHA and asset digest");
+    // GitHub Package-URL rules lowercase owner and repository name, while the
+    // repository's display name contains uppercase letters. Both predicate and
+    // subject must accept the canonical GitHub identity without relaxing tag,
+    // numeric repository ID, or artifact digest verification.
+    var canonicalPurlStatement=statement.Replace(
+        "pkg:github/gamba69/KeePassXC-Cloud-Sync@",
+        "pkg:github/gamba69/keepassxc-cloud-sync@",StringComparison.Ordinal);
+    ReleaseUpdatePolicy.VerifySignedStatement(canonicalPurlStatement,"7.2.1",
+        new string('a',40),zipName,new string('b',64));
+    Check(true,"canonical lowercase GitHub package URL accepted in predicate and tag subject");
+    var mixedCaseRepositoryStatement=canonicalPurlStatement.Replace(
+        "\"repository\":\"gamba69/KeePassXC-Cloud-Sync\"",
+        "\"repository\":\"GAMBA69/keepassxc-cloud-sync\"",StringComparison.Ordinal);
+    ReleaseUpdatePolicy.VerifySignedStatement(mixedCaseRepositoryStatement,"7.2.1",
+        new string('a',40),zipName,new string('b',64));
+    Check(true,"authenticated repository identity is case-insensitive");
+    Rejected(()=>ReleaseUpdatePolicy.VerifySignedStatement(
+        canonicalPurlStatement.Replace("pkg:github/gamba69/keepassxc-cloud-sync@",
+            "pkg:github/gamba69/another-repository@",StringComparison.Ordinal),
+        "7.2.1",new string('a',40),zipName,new string('b',64)),
+        "canonical package URL cannot select another repository");
+    Rejected(()=>ReleaseUpdatePolicy.VerifySignedStatement(
+        canonicalPurlStatement.Replace("@7.2.1","@7.2.2",StringComparison.Ordinal),
+        "7.2.1",new string('a',40),zipName,new string('b',64)),
+        "canonical package URL cannot select another tag");
+    Rejected(()=>ReleaseUpdatePolicy.VerifySignedStatement(
+        canonicalPurlStatement.Replace("@7.2.1","@7.2.1?source=other",StringComparison.Ordinal),
+        "7.2.1",new string('a',40),zipName,new string('b',64)),
+        "unexpected GitHub package URL qualifier is rejected");
+    Rejected(()=>ReleaseUpdatePolicy.VerifySignedStatement(
+        canonicalPurlStatement.Replace("\"repositoryId\":\"1454413194\"",
+            "\"repositoryId\":\"9999999999\"",StringComparison.Ordinal),
+        "7.2.1",new string('a',40),zipName,new string('b',64)),
+        "canonical package URL cannot bypass signed numeric repository identity");
+    Rejected(()=>ReleaseUpdatePolicy.VerifySignedStatement(
+        canonicalPurlStatement,"7.2.1",new string('a',40),zipName,new string('c',64)),
+        "canonical package URL cannot bypass signed archive digest");
     // GitHub Release Attestations use distinct subject shapes: tag = uri + sha1,
     // archive = name + sha256. Missing optional names must not throw.
     Check(!statement.Contains("\"name\":\"pkg:github",StringComparison.Ordinal),
