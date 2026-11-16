@@ -14,7 +14,10 @@ internal interface IUpdateService : IDisposable
     bool IsReinstallReady { get; }
     event Action? Changed;
     void SavePreferences(UpdatePreferences value);
-    Task CheckAsync(bool manual, CancellationToken cancellationToken = default, bool reinstall = false);
+    Task CheckAsync(bool manual, CancellationToken cancellationToken = default,
+        bool reinstall = false, IProgress<UpdateOperationProgress>? progress = null);
+    UpdateOperationResult? ReadOperationResult();
+    void AcknowledgeOperationResult();
     void ValidateInstallation();
     void LaunchInstaller(bool restart, string configPath, bool background, bool confirmedReinstall = false);
     void CleanupCompleted();

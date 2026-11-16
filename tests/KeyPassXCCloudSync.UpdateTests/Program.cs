@@ -19,6 +19,54 @@ static string FreshFolder()
     var dir=Path.Combine(Path.GetTempPath(),"KpSync-UpdateTests-"+Guid.NewGuid().ToString("N"));
     Directory.CreateDirectory(dir);return dir;
 }
+// The result journal survives cleanup, is isolated to each portable install,
+// and is not allowed to display fabricated success or multiline detail.
+var resultSandbox=FreshFolder();
+try
+{
+    var root=Path.Combine(resultSandbox,"updates");
+    var targetA=Path.Combine(resultSandbox,"app-a");
+    var targetB=Path.Combine(resultSandbox,"app-b");
+    Directory.CreateDirectory(targetA);
+    Directory.CreateDirectory(targetB);
+    var installed=new UpdateOperationResult("installed","repair","8.0.9","8.0.9", "ok\nnext");
+    UpdateOperationResults.Save(root,targetA,installed);
+    Check(UpdateOperationResults.Read(root,targetA) is { } received &&
+        received.Status=="installed" && received.Operation=="repair" &&
+        received.Detail=="oknext","recovery result is stored atomically and sanitized");
+    Check(UpdateOperationResults.Read(root,targetB) is null &&
+        UpdateOperationResults.PathFor(root,targetA)!=UpdateOperationResults.PathFor(root,targetB),
+        "result journal is scoped to the exact installation");
+    Rejected(()=>UpdateOperationResults.Save(root,targetA,
+        new("ready","update","8.0.9","8.1.0")),"untrusted success status rejected");
+    var path=UpdateOperationResults.PathFor(root,targetA);
+    File.WriteAllText(path,"installed\nrepair\n8.0.9\n8.0.9\nextra\nline\n");
+    Check(UpdateOperationResults.Read(root,targetA) is null,"extra result lines rejected");
+    File.WriteAllText(path,new string('X',2049));
+    Check(UpdateOperationResults.Read(root,targetA) is null,"oversized result journal rejected");
+    UpdateOperationResults.Save(root,targetA,new("rolled-back","update","8.0.9","8.1.0"));
+    Check(UpdateOperationResults.Read(root,targetA)?.Status=="rolled-back",
+        "rollback result is retained");
+    UpdateOperationResults.Consume(root,targetA);
+    Check(UpdateOperationResults.Read(root,targetA) is null,"result shown only once after acknowledgement");
+    var legacy=Path.Combine(root,"pending-legacy");
+    Directory.CreateDirectory(legacy);
+    File.WriteAllText(Path.Combine(legacy,"target.txt"),targetA);
+    var runningVersion=typeof(WindowsUpdateService).Assembly.GetName().Version?.ToString(3)
+        ?? throw new InvalidOperationException("Update assembly version is unavailable.");
+    File.WriteAllText(Path.Combine(legacy,"verified.txt"),runningVersion);
+    File.WriteAllText(Path.Combine(root,"completed.txt"),legacy);
+    UpdateOperationResults.CaptureLegacyCompleted(root,targetA,runningVersion);
+    Check(UpdateOperationResults.Read(root,targetA) is { Status:"installed", Operation:"update" },
+        "completed marker from pre-8.1 helper survives cleanup");
+    Check(UpdateOperationResults.Read(root,targetB) is null,
+        "legacy marker from another installation is ignored");
+    UpdateOperationResults.Consume(root,targetA);
+    File.Delete(Path.Combine(root,"completed.txt"));
+    Check(UpdateOperationResults.Read(root,targetA) is null,
+        "legacy acknowledgement does not reappear after staging cleanup");
+}
+finally {Directory.Delete(resultSandbox,true);}
 static byte[] Zip(params (string Name,string Text)[] files)
 {
     using var stream=new MemoryStream();
@@ -395,6 +443,39 @@ try
             failsVerification.Snapshot.Detail.Contains("attestation verification failed",StringComparison.Ordinal),
             "failed immutable attestation blocks same-version reinstall");
     }
+    // Cancel immediately after the checking phase is announced, before a
+    // download starts. The snapshot must not remain stuck on "checking".
+    using (var cancelled=new WindowsUpdateService(
+        new ScriptedHandler(zipData,hash,releaseTag,false),Path.Combine(temp,"cancelled")))
+    {
+        using var stop=new CancellationTokenSource();
+        var report=new RecordingUpdateProgress { OnReport=item=>
+        {if(item.Phase=="checking")stop.Cancel();} };
+        var didCancel=false;
+        try {await cancelled.CheckAsync(true,stop.Token,progress:report);}
+        catch(OperationCanceledException) {didCancel=true;}
+        Check(didCancel && cancelled.Snapshot.Status=="idle" && !cancelled.IsReady,
+            "cancelled manual check clears the visible checking state");
+    }
+Check(UpdateHelperBootstrap.Arguments is null && !UpdateHelperBootstrap.WorkStarted &&
+    UpdateHelperBootstrap.Execute is null,
+    "normal application never bootstraps a temporary updater worker");
+var helperCalls=0;
+UpdateHelperBootstrap.Execute=(helperArgs,feedback)=>
+{
+    helperCalls++;
+    feedback?.Invoke(new UpdateOperationProgress("testing",50));
+    return helperArgs.Length==1 && helperArgs[0]=="--apply-update"?17:19;
+};
+try
+{
+    UpdateOperationProgress? observed=null;
+    Check(UpdateHelperBootstrap.Run(new[]{"--apply-update"},p=>observed=p)==17 &&
+        observed is {Phase:"testing",Percent:50} && helperCalls==1,
+        "shared UI worker delegates exclusively to the configured platform callback");
+}
+finally {UpdateHelperBootstrap.Execute=null;}
+
     var root=Path.Combine(temp,"updater");
     var pending=Path.Combine(root,"pending-"+releaseTag);
     var handler=new ScriptedHandler(zipData,hash,releaseTag,immutable:false);
@@ -404,7 +485,14 @@ try
     updates.SavePreferences(new UpdatePreferences(true,true,"manual"));
     using (var saved=new WindowsUpdateService(new ScriptedHandler(zipData,hash,releaseTag,false),root))
         Check(saved.Preferences.Installation=="manual","local installation preference survives restart");
-    await updates.CheckAsync(true);
+    var progress=new RecordingUpdateProgress();
+    await updates.CheckAsync(true,progress:progress);
+    Check(progress.Events.FirstOrDefault()?.Phase=="checking" &&
+        progress.Events.Any(p=>p.Phase=="downloading" && p.Percent==100) &&
+        progress.Events.Any(p=>p.Phase=="verifying") &&
+        progress.Events.Any(p=>p.Phase=="extracting") &&
+        progress.Events.LastOrDefault()?.Phase=="ready",
+        "preparation reports real download bytes and the verified stage sequence");
     Check(updates.IsReady && updates.Snapshot.Status=="ready" && updates.Snapshot.Unverified &&
         updates.Snapshot.Detail.Contains("Immutability",StringComparison.Ordinal),
         "mutable GitHub release downloads but explicitly warns user");
@@ -656,6 +744,17 @@ try
 }
 finally { Directory.Delete(temp,true); }
 Console.WriteLine("[SUMMARY] UpdateTests completed.");
+
+sealed class RecordingUpdateProgress : IProgress<UpdateOperationProgress>
+{
+    internal List<UpdateOperationProgress> Events {get;}=[];
+    internal Action<UpdateOperationProgress>? OnReport {get;set;}
+    public void Report(UpdateOperationProgress item)
+    {
+        Events.Add(item);
+        OnReport?.Invoke(item);
+    }
+}
 
 sealed class ScriptedHandler(byte[] zip,string checksum,string tag,bool? immutable,
     bool offHost=false,bool omitChecksum=false):HttpMessageHandler

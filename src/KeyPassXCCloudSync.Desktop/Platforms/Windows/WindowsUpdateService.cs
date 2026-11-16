@@ -24,6 +24,9 @@ internal sealed class WindowsUpdateService : IUpdateService
     private const string TufBootstrapSha256 = "98cba97be9075bc98b2322de3de85fbd1b70ec7392991dfd2f53d215bede1a8d";
     private const long MaxResponse = 3 * 1024 * 1024;
     private const long MaxZip = 256L * 1024 * 1024;
+    internal static string DefaultRoot => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "KeyPassXCCloudSync","updates");
     private readonly HttpClient _client;
     private readonly SemaphoreSlim _gate = new(1,1);
     private readonly Func<string,string,string,CancellationToken,Task> _verifyImmutable;
@@ -39,8 +42,7 @@ internal sealed class WindowsUpdateService : IUpdateService
     internal WindowsUpdateService(HttpMessageHandler? handler = null, string? root = null,
         Func<string,string,string,CancellationToken,Task>? verifyImmutable = null)
     {
-        _root = root ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "KeyPassXCCloudSync", "updates");
+        _root = root ?? DefaultRoot;
         _settingsPath = Path.Combine(_root,"preferences.txt");
         _client = handler is null ? new HttpClient() : new HttpClient(handler);
         _verifyImmutable = verifyImmutable ??
@@ -58,6 +60,20 @@ internal sealed class WindowsUpdateService : IUpdateService
     public bool IsReinstallReady => IsReady && _readyIsReinstall;
     public event Action? Changed;
     private void Publish(UpdateSnapshot snapshot) { _snapshot = snapshot; Changed?.Invoke(); }
+
+    public UpdateOperationResult? ReadOperationResult()
+    {
+        var target=Path.GetDirectoryName(Environment.ProcessPath);
+        if(target is null)return null;
+        UpdateOperationResults.CaptureLegacyCompleted(_root,target,BuildInfo.Version);
+        return UpdateOperationResults.Read(_root,target);
+    }
+
+    public void AcknowledgeOperationResult()
+    {
+        var target=Path.GetDirectoryName(Environment.ProcessPath);
+        if(target is not null)UpdateOperationResults.Consume(_root,target);
+    }
 
     private UpdatePreferences ReadPreferences()
     {
@@ -114,7 +130,8 @@ internal sealed class WindowsUpdateService : IUpdateService
         }
     }
 
-    public async Task CheckAsync(bool manual, CancellationToken cancellationToken = default, bool reinstall = false)
+    public async Task CheckAsync(bool manual, CancellationToken cancellationToken = default,
+        bool reinstall = false, IProgress<UpdateOperationProgress>? progress = null)
     {
         if (reinstall && !manual)
             throw new ArgumentException("Reinstallation requires an explicit manual request.",nameof(reinstall));
@@ -128,6 +145,8 @@ internal sealed class WindowsUpdateService : IUpdateService
             var cached=IsReady && _snapshot.Status=="ready" ? _snapshot : null;
             var cachedTag=cached?.Version;
             Publish(new UpdateSnapshot("checking"));
+            progress?.Report(new("checking"));
+            cancellationToken.ThrowIfCancellationRequested();
             using var release = await GetJsonAsync(Releases,cancellationToken);
             var json = release.RootElement;
             if (json.GetProperty("draft").GetBoolean() || json.GetProperty("prerelease").GetBoolean())
@@ -183,7 +202,9 @@ internal sealed class WindowsUpdateService : IUpdateService
             try
             {
                 var zipPath=Path.Combine(directory,zipName);
-                await DownloadAsync(zipUrl,zipPath,MaxZip,cancellationToken);
+                progress?.Report(new("downloading",0));
+                await DownloadAsync(zipUrl,zipPath,MaxZip,cancellationToken,progress);
+                progress?.Report(new("verifying"));
                 var checksum=await GetTextAsync(shaUrl,4096,cancellationToken);
                 var expectedDigest=zip.TryGetProperty("digest",out var digest)
                     ?digest.GetString():null;
@@ -201,6 +222,7 @@ internal sealed class WindowsUpdateService : IUpdateService
                             "GitHub release attestation verification failed: " + ex.Message,ex);
                     }
                 }
+                progress?.Report(new("extracting"));
                 ReleaseUpdatePolicy.ExtractVerifiedArchive(zipPath,Path.Combine(directory,"payload"));
                 WritePayloadManifest(directory);
                 if (!immutable) File.WriteAllText(Path.Combine(directory,"unverified.txt"),"mutable");
@@ -209,6 +231,7 @@ internal sealed class WindowsUpdateService : IUpdateService
                 File.WriteAllText(Path.Combine(_root,"ready.txt"),tag);
                 _readyDirectory=directory;
                 _readyIsReinstall=reinstalling;
+                progress?.Report(new("ready",100));
                 Publish(new UpdateSnapshot("ready",tag,warning,!immutable,reinstalling));
             }
             catch
@@ -217,7 +240,11 @@ internal sealed class WindowsUpdateService : IUpdateService
                 throw;
             }
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            Publish(new UpdateSnapshot("idle"));
+            throw;
+        }
         catch (Exception ex)
         {
             Publish(new UpdateSnapshot("error", "", ex.Message));
@@ -260,11 +287,13 @@ internal sealed class WindowsUpdateService : IUpdateService
         }
         return output.ToArray();
     }
-    private async Task DownloadAsync(Uri url,string destination,long limit,CancellationToken ct)
+    private async Task DownloadAsync(Uri url,string destination,long limit,CancellationToken ct,
+        IProgress<UpdateOperationProgress>? progress=null)
     {
         using var response=await _client.GetAsync(url,HttpCompletionOption.ResponseHeadersRead,ct);
         response.EnsureSuccessStatusCode();
-        if (response.Content.Headers.ContentLength is { } length && length>limit)
+        var total=response.Content.Headers.ContentLength;
+        if (total is { } length && length>limit)
             throw new InvalidDataException("Archive exceeds size limit.");
         await using var input=await response.Content.ReadAsStreamAsync(ct);
         await using var output=new FileStream(destination,FileMode.CreateNew,FileAccess.Write,FileShare.None);
@@ -274,6 +303,9 @@ internal sealed class WindowsUpdateService : IUpdateService
         {
             if (output.Length+read>limit) throw new InvalidDataException("Archive exceeds size limit.");
             await output.WriteAsync(buffer.AsMemory(0,read),ct);
+            // Unknown Content-Length means genuinely indeterminate progress.
+            progress?.Report(new("downloading",total is > 0
+                ?(int)Math.Clamp(100d*output.Length/total.Value,0,100):null));
         }
     }
 
@@ -432,6 +464,11 @@ internal sealed class WindowsUpdateService : IUpdateService
         var current=Environment.ProcessPath??throw new InvalidOperationException("Missing application path.");
         if (!string.Equals(Path.GetFileName(current),ReleaseUpdatePolicy.Executable,
             StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("Unexpected application executable.");
+        // The helper and post-restart result read these from the verified stage,
+        // never from user profile preferences or the currently running EXE.
+        File.WriteAllText(Path.Combine(stage,"operation.txt"),IsReinstallReady?"repair":"update");
+        File.WriteAllText(Path.Combine(stage,"source-version.txt"),BuildInfo.Version);
+        File.WriteAllText(Path.Combine(stage,"operation-language.txt"),UiLang.Active);
         var helper=Path.Combine(stage,"update-helper.exe");
         File.Copy(current,helper,true);
         // A NativeAOT binary can depend on private native runtime DLLs.
@@ -440,7 +477,7 @@ internal sealed class WindowsUpdateService : IUpdateService
             if(ReleaseUpdatePolicy.IsOwnedFile(Path.GetFileName(dll)))
                 File.Copy(dll,Path.Combine(stage,Path.GetFileName(dll)),true);
         using var self=Process.GetCurrentProcess();
-        var info=new ProcessStartInfo(helper){UseShellExecute=false,CreateNoWindow=true};
+        var info=new ProcessStartInfo(helper){UseShellExecute=false,CreateNoWindow=false};
         foreach (var argument in new[] {"--apply-update",Path.GetDirectoryName(current)!,stage,
             self.Id.ToString(CultureInfo.InvariantCulture),self.StartTime.ToUniversalTime().Ticks.ToString(CultureInfo.InvariantCulture),
             restart?"1":"0",configPath,background?"1":"0"}) info.ArgumentList.Add(argument);
@@ -468,7 +505,7 @@ internal sealed class WindowsUpdateService : IUpdateService
         if(!File.Exists(helper))
             throw new IOException("The temporary recovery helper is missing.");
         using var self=Process.GetCurrentProcess();
-        var info=new ProcessStartInfo(helper){UseShellExecute=false,CreateNoWindow=true};
+        var info=new ProcessStartInfo(helper){UseShellExecute=false,CreateNoWindow=false};
         foreach (var value in new[]{"--recover-update",stage,target,
             self.Id.ToString(CultureInfo.InvariantCulture),
             self.StartTime.ToUniversalTime().Ticks.ToString(CultureInfo.InvariantCulture)})
@@ -478,74 +515,158 @@ internal sealed class WindowsUpdateService : IUpdateService
         return true;
     }
 
-    internal static int ApplyRecovery(string[] args)
+    private static void SaveResult(string root,string target,UpdateOperationResult result)
+    {
+        try { UpdateOperationResults.Save(root,target,result); }
+        catch(Exception ex) when(ex is IOException or UnauthorizedAccessException or
+            ArgumentException or InvalidDataException)
+        { /* UI bookkeeping must not invalidate installation or rollback. */ }
+    }
+
+    private static string StageOperation(string stage)
+    {
+        try {return File.ReadAllText(Path.Combine(stage,"operation.txt")).Trim()=="repair"
+            ?"repair":"update";}
+        catch(Exception ex) when(ex is IOException or UnauthorizedAccessException)
+        {return "update";}
+    }
+    private static string StageFromVersion(string stage)
+    {
+        try {return File.ReadAllText(Path.Combine(stage,"source-version.txt")).Trim();}
+        catch(Exception ex) when(ex is IOException or UnauthorizedAccessException)
+        {return BuildInfo.Version;}
+    }
+    private static string StageToVersion(string stage)
+    {
+        try {return ReleaseUpdatePolicy.ParseVersion(File.ReadAllText(
+            Path.Combine(stage,"verified.txt")).Trim()).ToString(3);}
+        catch(Exception ex) when(ex is IOException or UnauthorizedAccessException or
+            ArgumentException or InvalidDataException or OverflowException)
+        {return BuildInfo.Version;}
+    }
+
+    internal static int ApplyRecovery(string[] args,Action<UpdateOperationProgress>? progress=null)
     {
         if (args.Length<5 || args[0]!="--recover-update") return 2;
+        var stage=Path.GetFullPath(args[1]);
+        var target=Path.GetFullPath(args[2]);
+        var root=DefaultRoot;
+        bool validStage=false;
         try
         {
-            var stage=Path.GetFullPath(args[1]);
-            var target=Path.GetFullPath(args[2]);
-            var root=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "KeyPassXCCloudSync","updates");
             if (!stage.StartsWith(Path.GetFullPath(root)+Path.DirectorySeparatorChar,
                     StringComparison.OrdinalIgnoreCase) ||
                 !string.Equals(File.ReadAllText(Path.Combine(stage,"target.txt")).Trim(),target,
                     StringComparison.OrdinalIgnoreCase)) return 3;
+            validStage=true;
             if (!int.TryParse(args[3],NumberStyles.None,CultureInfo.InvariantCulture,out var pid) ||
                 !long.TryParse(args[4],NumberStyles.None,CultureInfo.InvariantCulture,out var ticks)) return 4;
+            progress?.Invoke(new("waiting"));
             try
             {
                 using var old=Process.GetProcessById(pid);
                 if (old.StartTime.ToUniversalTime().Ticks!=ticks || !old.WaitForExit(120000)) return 5;
             }
             catch (ArgumentException) { /* Original process has exited. */ }
+            progress?.Invoke(new("rollback"));
             RestoreBackup(stage,target,root);
             File.Delete(Path.Combine(root,"installing.txt"));
             File.WriteAllText(Path.Combine(root,"completed.txt"),stage);
+            SaveResult(root,target,new("rolled-back",StageOperation(stage),
+                StageFromVersion(stage),StageToVersion(stage)));
+            progress?.Invoke(new("starting",100));
             var info=new ProcessStartInfo(Path.Combine(target,ReleaseUpdatePolicy.Executable))
                 {UseShellExecute=false};
             for (var i=5;i<args.Length;i++) info.ArgumentList.Add(args[i]);
             if (Process.Start(info) is null) return 6;
             return 0;
         }
-        catch (Exception) { return 1; }
+        catch (Exception ex)
+        {
+            progress?.Invoke(new("failed",null,ex.Message));
+            if(validStage)
+                SaveResult(root,target,new("failed",StageOperation(stage),
+                    StageFromVersion(stage),StageToVersion(stage),ex.GetType().Name+": "+ex.Message));
+            return 1;
+        }
     }
 
-    internal static int ApplyUpdate(string[] args)
+    internal static int ApplyUpdate(string[] args,Action<UpdateOperationProgress>? progress=null)
     {
         if (args.Length!=8 || args[0]!="--apply-update" || args[5] is not ("0" or "1") ||
             args[7] is not ("0" or "1")) return 2;
+        var target=Path.GetFullPath(args[1]);
+        var stage=Path.GetFullPath(args[2]);
+        var root=DefaultRoot;
+        bool validStage=false,attemptedInstall=false;
         try
         {
-            var target=Path.GetFullPath(args[1]);
-            var stage=Path.GetFullPath(args[2]);
-            var root=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "KeyPassXCCloudSync","updates");
             if (!stage.StartsWith(Path.GetFullPath(root)+Path.DirectorySeparatorChar,
                     StringComparison.OrdinalIgnoreCase) ||
                 !File.Exists(Path.Combine(stage,"verified.txt")) ||
                 !File.Exists(Path.Combine(target,ReleaseUpdatePolicy.Executable))) return 3;
+            validStage=true;
             if (!int.TryParse(args[3],NumberStyles.None,CultureInfo.InvariantCulture,out var pid) ||
                 !long.TryParse(args[4],NumberStyles.None,CultureInfo.InvariantCulture,out var ticks)) return 4;
+            progress?.Invoke(new("waiting"));
             try
             {
                 using var original=Process.GetProcessById(pid);
                 if (original.StartTime.ToUniversalTime().Ticks!=ticks || !original.WaitForExit(120000)) return 5;
             }
             catch (ArgumentException) { /* Old process exited. */ }
+            var total=Directory.GetFiles(Path.Combine(stage,"payload"),"*",SearchOption.TopDirectoryOnly).Length;
+            var completed=0;
+            attemptedInstall=true;
+            progress?.Invoke(new("installing",0));
             ApplyVerifiedFiles(stage,target,root,
-                validateNew:()=>SmokeTestExecutable(Path.Combine(target,ReleaseUpdatePolicy.Executable)));
+                beforeReplace:name=>progress?.Invoke(new("installing",
+                    total==0?null:(int)(90d*++completed/total),name)),
+                validateNew:()=>
+                {
+                    progress?.Invoke(new("testing"));
+                    return SmokeTestExecutable(Path.Combine(target,ReleaseUpdatePolicy.Executable));
+                });
+            SaveResult(root,target,new("installed",StageOperation(stage),
+                StageFromVersion(stage),StageToVersion(stage)));
+            progress?.Invoke(new("starting",100));
             if (args[5]=="1")
             {
                 var start=new ProcessStartInfo(Path.Combine(target,ReleaseUpdatePolicy.Executable))
                     {UseShellExecute=false};
                 start.ArgumentList.Add(args[7]=="1"?"--background":"--show");
                 start.ArgumentList.Add("--config");start.ArgumentList.Add(args[6]);
-                Process.Start(start);
+                // The install has committed and its result is persisted. A launch
+                // failure must not be reported as rollback or trigger a reapply.
+                try {if(Process.Start(start) is null)return 6;}
+                catch(Exception) {return 6;}
             }
             return 0;
         }
-        catch (Exception) { return 1; }
+        catch (Exception ex)
+        {
+            progress?.Invoke(new("failed",null,ex.Message));
+            if(validStage)
+            {
+                // If the journal remains, recovery must run before another launch.
+                var safeToRestart=attemptedInstall && !File.Exists(Path.Combine(root,"installing.txt"));
+                SaveResult(root,target,new(safeToRestart?"rolled-back":"failed",StageOperation(stage),
+                    StageFromVersion(stage),StageToVersion(stage),ex.GetType().Name+": "+ex.Message));
+                if(args[5]=="1" && safeToRestart)
+                {
+                    try
+                    {
+                        var start=new ProcessStartInfo(Path.Combine(target,ReleaseUpdatePolicy.Executable))
+                            {UseShellExecute=false};
+                        start.ArgumentList.Add(args[7]=="1"?"--background":"--show");
+                        start.ArgumentList.Add("--config");start.ArgumentList.Add(args[6]);
+                        Process.Start(start);
+                    }
+                    catch(Exception) { /* The result remains for a manual launch. */ }
+                }
+            }
+            return 1;
+        }
     }
 
     // Only files installed by an earlier verified update are eligible for removal.

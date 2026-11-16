@@ -49,6 +49,14 @@ public sealed partial class GuiApp : Application
     public override void Initialize() => AvaloniaXamlLoader.Load(this);
     public override void OnFrameworkInitializationCompleted()
     {
+        if(UpdateHelperBootstrap.Arguments is { } workerArgs &&
+            ApplicationLifetime is IClassicDesktopStyleApplicationLifetime workerLifetime)
+        {
+            workerLifetime.ShutdownMode=ShutdownMode.OnMainWindowClose;
+            workerLifetime.MainWindow=UpdateOperationWindow.Worker(workerArgs);
+            base.OnFrameworkInitializationCompleted();
+            return;
+        }
         if(UiSmokeMode)
         {
             base.OnFrameworkInitializationCompleted();

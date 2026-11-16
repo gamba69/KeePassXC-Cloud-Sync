@@ -46,10 +46,27 @@ internal static class WindowsHost
         if(!OperatingSystem.IsWindows())
             throw new PlatformNotSupportedException("This distribution provides a Windows implementation only.");
         if(args.Length==1 && args[0]=="--selftest-update")return 0;
-        if(args.Length>0 && args[0]=="--apply-update")
-            return WindowsUpdateService.ApplyUpdate(args);
-        if(args.Length>0 && args[0]=="--recover-update")
-            return WindowsUpdateService.ApplyRecovery(args);
+        if(args.Length>0 && args[0] is "--apply-update" or "--recover-update")
+        {
+            UpdateHelperBootstrap.Arguments=args;
+            UpdateHelperBootstrap.Execute=(workerArgs,progress)=>workerArgs[0]=="--apply-update"
+                ?WindowsUpdateService.ApplyUpdate(workerArgs,progress)
+                :WindowsUpdateService.ApplyRecovery(workerArgs,progress);
+            try
+            {
+                // AOT helper displays only the Avalonia operation window.
+                var code=AppBuilder.Configure<GuiApp>().UsePlatformDetect()
+                    .StartWithClassicDesktopLifetime(Array.Empty<string>());
+                return Environment.ExitCode!=0?Environment.ExitCode:code;
+            }
+            catch(Exception) when(!UpdateHelperBootstrap.WorkStarted)
+            {
+                // Fallback is safe only before the worker started applying files.
+                return args[0]=="--apply-update"
+                    ?WindowsUpdateService.ApplyUpdate(args)
+                    :WindowsUpdateService.ApplyRecovery(args);
+            }
+        }
         if(WindowsUpdateService.LaunchInterruptedRecovery(RecoveryStartupArguments(args)))return 0;
         var options=ParseNormalArguments(args);
         using var platform=new WindowsDesktopPlatform();

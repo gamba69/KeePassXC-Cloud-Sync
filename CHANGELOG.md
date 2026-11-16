@@ -4,6 +4,43 @@ All notable application and repository changes are recorded here, newest first.
 This is the only release-history document. All other documentation describes
 only the latest application behavior.
 
+## [8.1.1] - 2026-11-16
+
+### Fixed
+
+- Keep the temporary Avalonia updater bootstrap behind a shared, OS-neutral
+  delegate instead of referring to the Windows `Program` entrypoint in UI files.
+  The Windows adapter exclusively provides filesystem update/recovery actions.
+- Maintain a single UI helper state without starting the cloud engine or
+  duplicating installation work when Avalonia initialization fails.
+- Synchronize current-version metadata in README, security policy, and protocol
+  reference with the centralized project version so the source audit passes.
+
+### Tests
+
+- Check that updater bootstrap remains unset in normal execution and that
+  worker invocation is provided through the adapter-owned delegate.
+
+## [8.1.0] - 2026-11-15
+
+### Added
+
+- Avalonia update/recovery operation windows, adapted from KeePassXC Card Print 7.1.0–7.1.1:
+  visible preparation and download progress, temporary update-helper status,
+  and a one-time result dialog after the application restarts.
+- Per-installation persistent result journal with success, rollback and failure
+  acknowledgement; safely migrate the completion marker from older helpers.
+- Localized Ukrainian, Russian and English operation stages; foreground the
+  restarted window before displaying the modal result without permanent topmost.
+
+### Safety and tests
+
+- Preserve verified GitHub release authentication, rollback, synchronization
+  quiescence and same-version recovery confirmation. The update helper never
+  starts the cloud engine or opens a KDBX file.
+- Exercise result path isolation, result validation, acknowledgement, legacy
+  completion and initial/cancelled update progress via update regression tests.
+
 ## [8.0.9] - 2026-11-15
 
 ### Fixed
