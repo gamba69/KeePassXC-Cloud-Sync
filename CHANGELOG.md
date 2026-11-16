@@ -4,6 +4,22 @@ All notable application and repository changes are recorded here, newest first.
 This is the only release-history document. All other documentation describes
 only the latest application behavior.
 
+## [8.1.2] - 2026-11-16
+
+### Fixed
+
+- Bring the temporary Avalonia update/recovery window to the foreground when it
+  opens and again when the original application exits and file replacement or
+  rollback starts. Foreground elevation is temporary, never permanently topmost.
+- Grant the temporary helper Windows foreground-activation permission during
+  process handoff; keep native calls in the Windows platform adapter.
+- Preserve the existing verified update transaction and automatic rollback.
+
+### Tests
+
+- Cover the parent-exit foreground transition for installation and rollback,
+  without activating the window during download, waiting or routine progress.
+
 ## [8.1.1] - 2026-11-16
 
 ### Fixed

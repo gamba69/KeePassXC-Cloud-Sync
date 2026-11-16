@@ -52,6 +52,7 @@ internal static class WindowsHost
             UpdateHelperBootstrap.Execute=(workerArgs,progress)=>workerArgs[0]=="--apply-update"
                 ?WindowsUpdateService.ApplyUpdate(workerArgs,progress)
                 :WindowsUpdateService.ApplyRecovery(workerArgs,progress);
+            UpdateHelperBootstrap.ActivateWindow=WindowsUpdaterForeground.ActivateWindow;
             try
             {
                 // AOT helper displays only the Avalonia operation window.

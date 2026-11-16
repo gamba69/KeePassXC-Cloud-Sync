@@ -458,8 +458,15 @@ try
             "cancelled manual check clears the visible checking state");
     }
 Check(UpdateHelperBootstrap.Arguments is null && !UpdateHelperBootstrap.WorkStarted &&
-    UpdateHelperBootstrap.Execute is null,
+    UpdateHelperBootstrap.Execute is null && UpdateHelperBootstrap.ActivateWindow is null,
     "normal application never bootstraps a temporary updater worker");
+Check(UpdateHelperForegroundPolicy.AfterOwnerExit("installing") &&
+    UpdateHelperForegroundPolicy.AfterOwnerExit("rollback") &&
+    !UpdateHelperForegroundPolicy.AfterOwnerExit("waiting") &&
+    !UpdateHelperForegroundPolicy.AfterOwnerExit("downloading") &&
+    !UpdateHelperForegroundPolicy.AfterOwnerExit("testing") &&
+    !UpdateHelperForegroundPolicy.AfterOwnerExit("starting"),
+    "helper foreground is retried only after owner exit (install or rollback)");
 var helperCalls=0;
 UpdateHelperBootstrap.Execute=(helperArgs,feedback)=>
 {

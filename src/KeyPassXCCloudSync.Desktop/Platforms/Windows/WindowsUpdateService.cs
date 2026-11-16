@@ -481,7 +481,9 @@ internal sealed class WindowsUpdateService : IUpdateService
         foreach (var argument in new[] {"--apply-update",Path.GetDirectoryName(current)!,stage,
             self.Id.ToString(CultureInfo.InvariantCulture),self.StartTime.ToUniversalTime().Ticks.ToString(CultureInfo.InvariantCulture),
             restart?"1":"0",configPath,background?"1":"0"}) info.ArgumentList.Add(argument);
-        if (Process.Start(info) is null) throw new IOException("Could not launch update helper.");
+        using var helperProcess=Process.Start(info)
+            ??throw new IOException("Could not launch update helper.");
+        WindowsUpdaterForeground.AllowForeground(helperProcess);
     }
 
     // Recovery is performed by a TEMPORARY process. Never overwrite the
@@ -511,7 +513,9 @@ internal sealed class WindowsUpdateService : IUpdateService
             self.StartTime.ToUniversalTime().Ticks.ToString(CultureInfo.InvariantCulture)})
             info.ArgumentList.Add(value);
         foreach (var argument in startupArgs) info.ArgumentList.Add(argument);
-        if (Process.Start(info) is null) throw new IOException("Could not start recovery helper.");
+        using var helperProcess=Process.Start(info)
+            ??throw new IOException("Could not start recovery helper.");
+        WindowsUpdaterForeground.AllowForeground(helperProcess);
         return true;
     }
 

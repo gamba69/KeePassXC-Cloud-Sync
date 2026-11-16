@@ -24,6 +24,9 @@ internal sealed class UpdateOperationWindow : Window
     private bool _working;
     private bool _canCancel;
     private bool _finished;
+    private bool _helperMode;
+    private bool _reactivatedAfterOwnerExit;
+    private int _foregroundRequest;
 
     internal UpdateOperationWindow(string operation,string fromVersion,string toVersion,
         string? language=null)
@@ -153,6 +156,36 @@ internal sealed class UpdateOperationWindow : Window
             :status.Detail;
         _progress.IsIndeterminate=status.Percent is null;
         if(status.Percent is { } value)_progress.Value=Math.Clamp(value,0,100);
+        if(_helperMode && !_reactivatedAfterOwnerExit &&
+            UpdateHelperForegroundPolicy.AfterOwnerExit(status.Phase))
+        {
+            _reactivatedAfterOwnerExit=true;
+            RequestHelperForeground();
+        }
+    }
+
+    // The main window may still own foreground when the helper opens. Give the
+    // helper a short topmost pulse now and again after the old process exits.
+    // Neither event leaves the updater permanently topmost.
+    private async void RequestHelperForeground()
+    {
+        if(!_helperMode || !IsVisible)return;
+        var request=++_foregroundRequest;
+        try
+        {
+            Topmost=true;
+            Activate();
+            UpdateHelperBootstrap.ActivateWindow?.Invoke(this);
+            await Task.Delay(700);
+        }
+        catch(Exception ex) when(ex is not OutOfMemoryException)
+        {
+            // A denied foreground request must not stop an authenticated update.
+        }
+        finally
+        {
+            if(request==_foregroundRequest && IsVisible)Topmost=false;
+        }
     }
 
     internal void DisableCancellation()
@@ -232,9 +265,11 @@ internal sealed class UpdateOperationWindow : Window
         var to=ReadMeta("verified.txt",BuildInfo.Version).TrimStart('v');
         var lang=ReadMeta("operation-language.txt","auto");
         var window=new UpdateOperationWindow(kind,from,to,lang);
+        window._helperMode=true;
         window._button.IsVisible=false;
         window.Opened+=async (_,_)=>
         {
+            window.RequestHelperForeground();
             window._working=true;
             UpdateHelperBootstrap.WorkStarted=true;
             await Task.Yield();
