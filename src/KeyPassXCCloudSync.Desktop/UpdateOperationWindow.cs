@@ -32,7 +32,7 @@ internal sealed class UpdateOperationWindow : Window
         string? language=null)
     {
         _language=language is "ru" or "uk" or "en"?language:UiLang.Active;
-        Width=480;MinWidth=440;Height=240;MinHeight=240;
+        Width=470;MinWidth=440;SizeToContent=SizeToContent.Height;
         CanResize=false;
         ShowInTaskbar=true;
         WindowStartupLocation=WindowStartupLocation.CenterScreen;
@@ -48,18 +48,19 @@ internal sealed class UpdateOperationWindow : Window
         var header=new StackPanel{Orientation=Orientation.Horizontal,Spacing=12};
         header.Children.Add(_brand);header.Children.Add(labels);
         _phase=new TextBlock{TextWrapping=TextWrapping.Wrap,FontSize=13};
-        _detail=new TextBlock{TextWrapping=TextWrapping.Wrap,FontSize=12,MaxHeight=42};
+        _detail=new TextBlock{TextWrapping=TextWrapping.Wrap,FontSize=12,MaxHeight=48};
         _progress=new ProgressBar{Minimum=0,Maximum=100,Height=8,IsIndeterminate=true};
-        _button=new Button{Content=Localize("cancel"),MinWidth=96,
-            HorizontalAlignment=HorizontalAlignment.Right};
+        _button=new Button{Content=UiKit.IconLabel(Localize("cancel"),icon:"cancel"),
+            MinWidth=112,HorizontalAlignment=HorizontalAlignment.Right,
+            HorizontalContentAlignment=HorizontalAlignment.Center};
         _button.Click+=(_,_)=>OnButton();
-        var content=new StackPanel{Spacing=12};
+        var content=new StackPanel{Spacing=10};
         content.Children.Add(header);
         content.Children.Add(_phase);
         content.Children.Add(_progress);
         content.Children.Add(_detail);
         content.Children.Add(_button);
-        Content=new Border{Margin=new Thickness(12),Padding=new Thickness(16,14),
+        Content=new Border{Margin=new Thickness(10),Padding=new Thickness(14,12),
             CornerRadius=new CornerRadius(10),BorderThickness=new Thickness(1),Child=content};
         Closing+=(_,args)=>{if(_working)args.Cancel=true;};
         Opened+=(_,_)=>RefreshTheme();
@@ -129,6 +130,12 @@ internal sealed class UpdateOperationWindow : Window
         _=>key
     };
 
+    private void SetDetail(string? value)
+    {
+        _detail.Text=value??"";
+        _detail.IsVisible=!string.IsNullOrWhiteSpace(value);
+    }
+
     private void RefreshTheme()
     {
         var dark=ActualThemeVariant==ThemeVariant.Dark;
@@ -150,10 +157,10 @@ internal sealed class UpdateOperationWindow : Window
         if(!Dispatcher.UIThread.CheckAccess())
         { Dispatcher.UIThread.Post(()=>SetProgress(status));return; }
         _phase.Text=Localize(status.Phase);
-        _detail.Text=status.Percent is { } percent
+        SetDetail(status.Percent is { } percent
             ?percent.ToString(System.Globalization.CultureInfo.InvariantCulture)+"%"+
                 (status.Detail.Length==0?"":" · "+status.Detail)
-            :status.Detail;
+            :status.Detail);
         _progress.IsIndeterminate=status.Percent is null;
         if(status.Percent is { } value)_progress.Value=Math.Clamp(value,0,100);
         if(_helperMode && !_reactivatedAfterOwnerExit &&
@@ -224,7 +231,8 @@ internal sealed class UpdateOperationWindow : Window
         _canCancel=false;
         _progress.IsVisible=false;
         _phase.Text=message;
-        _button.Content=Localize("close");
+        SetDetail(null);
+        _button.Content=UiKit.IconLabel(Localize("close"),icon:"dismiss");
         _button.IsEnabled=true;
     }
 
@@ -243,9 +251,9 @@ internal sealed class UpdateOperationWindow : Window
             "rolled-back"=>"rolled-back",
             _=>"failed"
         });
-        window._detail.Text=result.Detail;
+        window.SetDetail(result.Detail);
         window._progress.IsVisible=false;
-        window._button.Content=window.Localize("close");
+        window._button.Content=UiKit.IconLabel(window.Localize("close"),icon:"dismiss");
         await window.ShowDialog(owner);
     }
 

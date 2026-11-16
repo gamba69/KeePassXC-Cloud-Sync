@@ -4,6 +4,17 @@ All notable application and repository changes are recorded here, newest first.
 This is the only release-history document. All other documentation describes
 only the latest application behavior.
 
+## [8.1.3] - 2026-11-16
+
+### Fixed
+
+- Use the existing Microsoft Fluent System Icons for Cancel and Close in
+  update, recovery and post-restart dialogs, matching other application buttons.
+- Size the Avalonia progress and result windows to their actual content rather
+  than reserving empty vertical space. Hide the optional detail row when empty;
+  retain sufficient room when an operation reports a file name or error.
+- Preserve the foreground handoff and verified installation/recovery behavior.
+
 ## [8.1.2] - 2026-11-16
 
 ### Fixed
