@@ -57,42 +57,55 @@ internal static class Program
                 Pass("Windows single-instance launch and acknowledgement");
             }
             // Exercise the actual Windows resolver without launching any CLI.
-            // The on-disk executables are inert test markers.
+            // The on-disk executables are inert test markers. The managed path
+            // is an isolated fixture: a real LocalAppData installation must
+            // never change these assertions or be modified by the tests.
             if(OperatingSystem.IsWindows())
             {
                 var appFolder=Path.Combine(directory,"portable-app");
                 var pathFolder=Path.Combine(directory,"on PATH");
                 var alternateFolder=Path.Combine(directory,"explicit");
+                var managedFolder=Path.Combine(directory,"managed-cli");
                 Directory.CreateDirectory(appFolder);
                 Directory.CreateDirectory(pathFolder);
                 Directory.CreateDirectory(alternateFolder);
+                Directory.CreateDirectory(managedFolder);
                 var localCli=Path.Combine(appFolder,"proton-drive.exe");
                 var pathCli=Path.Combine(pathFolder,"proton-drive.exe");
                 var manualCli=Path.Combine(alternateFolder,"proton-drive.exe");
+                var managedCli=Path.Combine(managedFolder,"proton-drive.exe");
                 File.WriteAllText(pathCli,"");
                 File.WriteAllText(manualCli,"");
                 var iniPath=Path.Combine(appFolder,"config.ini");
                 Check("Proton CLI found through PATH when not beside EXE",
-                    ProtonCliLocator.Resolve("",appFolder,iniPath,pathFolder)==pathCli);
+                    ProtonCliLocator.Resolve("",appFolder,iniPath,pathFolder,managedCli)==pathCli);
                 File.WriteAllText(localCli,"");
                 Check("Proton CLI beside app takes priority over PATH",
-                    ProtonCliLocator.Resolve("",appFolder,iniPath,pathFolder)==localCli);
+                    ProtonCliLocator.Resolve("",appFolder,iniPath,pathFolder,managedCli)==localCli);
                 Check("explicit Proton CLI path takes priority over both",
-                    ProtonCliLocator.Resolve(manualCli,appFolder,iniPath,pathFolder)==manualCli);
+                    ProtonCliLocator.Resolve(manualCli,appFolder,iniPath,pathFolder,managedCli)==manualCli);
                 File.Delete(localCli);
                 var toolsFolder=Path.Combine(appFolder,"tools");
                 Directory.CreateDirectory(toolsFolder);
                 var toolsCli=Path.Combine(toolsFolder,"proton-drive.exe");
                 File.WriteAllText(toolsCli,"");
-                Check("portable tools directory is checked before PATH",
-                    ProtonCliLocator.Resolve("",appFolder,iniPath,pathFolder)==toolsCli);
+                File.WriteAllText(managedCli,"");
+                Check("portable tools directory takes priority over managed CLI",
+                    ProtonCliLocator.Resolve("",appFolder,iniPath,pathFolder,managedCli)==toolsCli);
                 File.Delete(toolsCli);
-                Check("missing explicit Proton CLI never silently switches to PATH",
-                    ProtonCliLocator.Resolve(Path.Combine(alternateFolder,"missing.exe"),
-                        appFolder,iniPath,pathFolder)==Path.Combine(alternateFolder,"missing.exe"));
+                Check("managed Proton CLI takes priority over PATH",
+                    ProtonCliLocator.Resolve("",appFolder,iniPath,pathFolder,managedCli)==managedCli);
+                Check("explicit Proton CLI path takes priority over managed CLI",
+                    ProtonCliLocator.Resolve(manualCli,appFolder,iniPath,pathFolder,managedCli)==manualCli);
+                var missingCli=Path.Combine(alternateFolder,"missing.exe");
+                Check("missing explicit Proton CLI never silently switches to managed or PATH",
+                    ProtonCliLocator.Resolve(missingCli,appFolder,iniPath,pathFolder,managedCli)==missingCli);
+                File.Delete(managedCli);
                 Check("quoted PATH entries with spaces are supported",
-                    ProtonCliLocator.Resolve("",appFolder,iniPath,"\""+pathFolder+"\"")==pathCli);
-                Pass("Proton CLI resolution: portable, PATH and explicit file");
+                    ProtonCliLocator.Resolve("",appFolder,iniPath,"\""+pathFolder+"\"",managedCli)==pathCli);
+                Check("no CLI found if portable, managed and PATH are empty",
+                    ProtonCliLocator.Resolve("",appFolder,iniPath,"",managedCli)==string.Empty);
+                Pass("Proton CLI resolution: portable, managed, PATH and explicit file");
             }
             Check("fresh install (no INI)",!File.Exists(path));
             shell=new ShellWindow(app,path);

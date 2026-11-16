@@ -4,6 +4,57 @@ All notable application and repository changes are recorded here, newest first.
 This is the only release-history document. All other documentation describes
 only the latest application behavior.
 
+## [8.2.2] - 2026-11-16
+
+### Fixed
+
+- Isolate the Windows UI smoke tests for Proton CLI discovery from the
+  developer machine's actual managed CLI under LocalAppData. Use an absent
+  test-owned managed path and explicitly check the portable / managed / PATH
+  / configured-file precedence, including a missing configured file.
+- Prevent a correctly installed managed Proton CLI from causing an unrelated
+  PATH-precedence assertion to fail during the Windows build.
+
+### Tests
+
+- Add UI smoke coverage for the managed CLI taking precedence over PATH,
+  portable tools taking precedence over the managed CLI, explicit paths
+  staying authoritative, and the empty-discovery case.
+
+## [8.2.1] - 2026-11-16
+
+### Fixed
+
+- Persist the user-approved switch from a missing explicit Proton CLI path to
+  automatic managed CLI discovery immediately for an existing connection.
+  Closing the editor without pressing Save no longer resurrects the old path.
+- When the managed CLI is already installed, offer to select it instead of
+  displaying a misleading download prompt. Keep explicit paths fail-closed
+  until the user approves the switch.
+- Preserve cloud identity across in-dialog settings persistence, and cover
+  automatic-versus-explicit executable precedence with isolated tests.
+
+## [8.2.0] - 2026-11-16
+
+### Added
+
+- Offer to download the official Proton Drive CLI when a Proton connection is
+  created or edited without an available executable. Store it in the current
+  user's local tools directory; never silently override an explicit custom path.
+- Check Proton CLI updates separately from application updates, with an
+  independent automatic-check checkbox and manual actions in Settings.
+- Show the existing compact Avalonia progress dialog during download,
+  SHA-512 verification, idle wait, replacement and installation validation.
+- Use the official proton.me release index, architecture-specific binaries,
+  bounded streaming downloads, version validation and rollback on failure.
+- Block executable replacement while Proton store sessions are in progress;
+  never terminate a synchronization or restart the application for a CLI update.
+
+### Tests
+
+- Validate Proton release index parsing, architecture/checksum binding,
+  trusted download URL checks and exclusive synchronization/update leases.
+
 ## [8.1.3] - 2026-11-16
 
 ### Fixed

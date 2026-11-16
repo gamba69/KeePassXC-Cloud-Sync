@@ -81,8 +81,9 @@ internal sealed class WindowsUpdateService : IUpdateService
         {
             if (!File.Exists(_settingsPath)) return new();
             var lines = File.ReadAllLines(_settingsPath);
-            if (lines.Length != 3) return new();
-            return Validate(new UpdatePreferences(lines[0] == "true", lines[1] == "true", lines[2]));
+            if (lines.Length is not (3 or 4)) return new();
+            return Validate(new UpdatePreferences(lines[0] == "true", lines[1] == "true", lines[2],
+                lines.Length==3 || lines[3]=="true"));
         }
         catch (IOException) { return new(); }
         catch (UnauthorizedAccessException) { return new(); }
@@ -100,7 +101,8 @@ internal sealed class WindowsUpdateService : IUpdateService
         try
         {
             File.WriteAllText(tmp, (value.CheckAutomatically ? "true" : "false") + "\n" +
-                (value.DownloadAutomatically ? "true" : "false") + "\n" + value.Installation + "\n",
+                (value.DownloadAutomatically ? "true" : "false") + "\n" + value.Installation + "\n" +
+                (value.CheckProtonCliAutomatically ? "true" : "false") + "\n",
                 new UTF8Encoding(false));
             File.Move(tmp, _settingsPath, true);
             Preferences = value;

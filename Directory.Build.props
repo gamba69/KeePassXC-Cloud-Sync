@@ -1,7 +1,7 @@
 <Project>
   <!-- Single source for app, Core, diagnostics and release artifacts. -->
   <PropertyGroup>
-    <Version>8.1.3</Version>
+    <Version>8.2.2</Version>
     <AssemblyVersion>$(Version).0</AssemblyVersion>
     <FileVersion>$(Version).0</FileVersion>
     <InformationalVersion>$(Version)</InformationalVersion>

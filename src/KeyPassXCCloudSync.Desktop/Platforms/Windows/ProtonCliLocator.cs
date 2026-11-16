@@ -5,9 +5,13 @@ namespace KeyPassXCCloudSync;
 internal static class ProtonCliLocator
 {
     private const string CliFileName="proton-drive.exe";
+    internal static string ManagedPath => Path.Combine(Environment.GetFolderPath(
+        Environment.SpecialFolder.LocalApplicationData),"KeyPassXCCloudSync","tools",CliFileName);
 
+    // managedPathOverride exists only to make precedence tests independent of
+    // the actual Windows user's LocalAppData folder.
     internal static string Resolve(string? configured,string applicationDirectory,
-        string? configPath,string? pathEnvironment)
+        string? configPath,string? pathEnvironment,string? managedPathOverride=null)
     {
         if(!string.IsNullOrWhiteSpace(configured))
         {
@@ -33,6 +37,10 @@ internal static class ProtonCliLocator
                 var candidate=Path.GetFullPath(Path.Combine(directory,relative));
                 if(File.Exists(candidate))return candidate;
             }
+
+        // User-owned local install is preferred over a system/PATH executable.
+        var managed=managedPathOverride??ManagedPath;
+        if(File.Exists(managed))return managed;
 
         // Second: the executable must be available as proton-drive.exe via PATH.
         // Ignore empty, relative and malformed entries to prevent accidental

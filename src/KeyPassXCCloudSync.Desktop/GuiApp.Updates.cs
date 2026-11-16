@@ -10,6 +10,8 @@ public sealed partial class GuiApp
     private bool _updateDialogActive;
     private string _lastUpdateNotification = "";
     private string _lastUpdatePrompt = "";
+    private string _lastProtonPrompt = "";
+    private bool _protonPromptActive;
     private IUpdateService UpdateService => DesktopPlatform.Current.Updates;
 
     private void StartUpdates()
@@ -32,9 +34,17 @@ public sealed partial class GuiApp
                 };
             }
             UpdateService.Changed += () => Dispatcher.UIThread.Post(OnUpdateChanged);
+            ProtonCliUpdater.Changed += () => Dispatcher.UIThread.Post(OnProtonCliChanged);
             _updatesTimer = new DispatcherTimer { Interval = TimeSpan.FromHours(24) };
-            _updatesTimer.Tick += (_, _) => _ = UpdateService.CheckAsync(false);
+            _updatesTimer.Tick += (_, _) =>
+            {
+                _ = UpdateService.CheckAsync(false);
+                if(UpdateService.Preferences.CheckProtonCliAutomatically)
+                    _ = ProtonCliUpdater.CheckAsync(ConfigPath);
+            };
             _updatesTimer.Start();
+            if(UpdateService.Preferences.CheckProtonCliAutomatically)
+                _ = ProtonCliUpdater.CheckAsync(ConfigPath);
             // A command-line repair is interactive before any download starts.
             var repair=DesktopPlatform.Current.ConsumeReinstallRequest();
             if(repair && Shell is { } repairShell)
@@ -84,6 +94,72 @@ public sealed partial class GuiApp
             }
             catch (Exception) { /* Notification failure must not affect synchronization. */ }
         }
+    }
+
+    private void OnProtonCliChanged()
+    {
+        Shell?.RefreshUpdateStatus();
+        var state=ProtonCliUpdater.Status;
+        if(state.State!="available" || state.Latest==_lastProtonPrompt ||
+            _protonPromptActive)return;
+        _lastProtonPrompt=state.Latest;
+        if(Shell is {IsVisible:true} shell)
+            _=OfferProtonCliUpdateAsync(shell);
+        else if(Shell is not null)
+            Notifications.Send(Shell,UiLang.T("Доступно обновление Proton Drive CLI"),
+                state.Current+" → "+state.Latest);
+    }
+
+    private bool ProtonCloudsIdle()
+    {
+        var engine=Engine;
+        if(engine?.Current is not { } cfg)return true;
+        return cfg.Clouds.Where(c=>c.Provider=="ProtonDrive")
+            .All(c=>engine.Activity.Get(c.CloudId)?.Active!=true);
+    }
+
+    internal async Task CheckProtonCliAsync(bool manual)
+    {
+        await ProtonCliUpdater.CheckAsync(ConfigPath);
+        if(!manual || Shell is not { } shell)return;
+        var state=ProtonCliUpdater.Status;
+        if(state.State=="available")await OfferProtonCliUpdateAsync(shell);
+        else if(state.State=="missing")await MessageDialog.Info(shell,
+            UiLang.T("Proton Drive CLI"),UiLang.T("Proton Drive CLI не найден"));
+        else if(state.State=="error")await MessageDialog.Info(shell,
+            UiLang.T("Proton Drive CLI"),state.Error);
+    }
+
+    private async Task OfferProtonCliUpdateAsync(ShellWindow shell)
+    {
+        if(_protonPromptActive)return;
+        _protonPromptActive=true;
+        try
+        {
+            var state=ProtonCliUpdater.Status;
+            if(state.State!="available")return;
+            var message=UiLang.T("Скачать и проверить новую версию Proton CLI, затем заменить исполняемый файл после завершения всех синхронизаций Proton? Перезапуск приложения не требуется.");
+            message+="\n\n"+state.Path;
+            if(await MessageDialog.AskAction(shell,UiLang.T("Обновление Proton Drive CLI"),
+                message,UiLang.T("Обновить CLI")))
+                await InstallProtonCliAsync();
+        }
+        catch(Exception ex){shell.ShowProblem(UiLang.T("Proton Drive CLI"),ex.Message);}
+        finally{_protonPromptActive=false;}
+    }
+
+    internal async Task InstallProtonCliAsync()
+    {
+        if(Shell is not { } shell)return;
+        var state=ProtonCliUpdater.Status;
+        if(state.State is not ("available" or "missing"))return;
+        var dialog=new UpdateOperationWindow("proton",state.Current,state.Latest);
+        await dialog.RunPreparationAsync(shell,async token=>
+        {
+            await ProtonCliUpdater.InstallAsync(ConfigPath,false,ProtonCloudsIdle,
+                new Progress<UpdateOperationProgress>(dialog.SetProgress),token);
+            return true;
+        });
     }
 
     private async Task OfferUpdateRestartAsync(ShellWindow shell)

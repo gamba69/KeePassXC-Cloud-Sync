@@ -6,8 +6,9 @@ namespace KeyPassXCCloudSync;
 
 internal sealed partial class ShellWindow
 {
-    private TextBlock? _updateStatus;
+    private TextBlock? _updateStatus, _protonUpdateStatus;
     private Button? _checkUpdatesButton, _installUpdateButton, _repairUpdateButton;
+    private Button? _checkProtonButton, _installProtonButton;
     private bool _repairRunning;
     internal bool CanInstallUpdate => !_saving && !_testing && !_switchingSync;
 
@@ -53,6 +54,24 @@ internal sealed partial class ShellWindow
         _installUpdateButton=Action("Установить сейчас",()=>_=ConfirmInstallUpdateAsync());
         _repairUpdateButton=Action("Восстановить…",()=>_=RestoreCurrentVersionAsync());
         root.Children.Add(Row(_checkUpdatesButton,_installUpdateButton,_repairUpdateButton));
+        root.Children.Add(Text(UiLang.T("Proton Drive CLI"),14,true));
+        var protonAutomatic=new CheckBox
+        {
+            Content=UiLang.T("Автоматически проверять обновления Proton CLI"),
+            IsChecked=updates.Preferences.CheckProtonCliAutomatically
+        };
+        protonAutomatic.IsCheckedChanged+=(_,_)=>
+        {
+            var enabled=protonAutomatic.IsChecked==true;
+            updates.SavePreferences(updates.Preferences with {CheckProtonCliAutomatically=enabled});
+            if(enabled)_=_app.CheckProtonCliAsync(false);
+        };
+        root.Children.Add(protonAutomatic);
+        _protonUpdateStatus=Text("",12,false,Secondary);
+        root.Children.Add(_protonUpdateStatus);
+        _checkProtonButton=Action("Проверить CLI",()=>_= _app.CheckProtonCliAsync(true));
+        _installProtonButton=Action("Обновить CLI",()=>_= _app.InstallProtonCliAsync());
+        root.Children.Add(Row(_checkProtonButton,_installProtonButton));
         RefreshUpdateStatus();
         return root;
     }
@@ -60,6 +79,29 @@ internal sealed partial class ShellWindow
     internal void RefreshUpdateStatus()
     {
         if (_updateStatus is null) return;
+        var proton=ProtonCliUpdater.Status;
+        if(_protonUpdateStatus is not null)
+        {
+            var caption=proton.State switch
+            {
+                "missing"=>"Proton Drive CLI не найден",
+                "checking"=>"Проверка Proton CLI…",
+                "current"=>"Proton CLI: актуальная версия",
+                "available"=>"Доступно обновление Proton Drive CLI",
+                "error"=>"Ошибка проверки Proton CLI",
+                _=>"Proton CLI: обновления не проверялись"
+            };
+            _protonUpdateStatus.Text=UiLang.T(caption)+
+                (proton.Current.Length>0?" · "+proton.Current:"")+
+                (proton.Latest.Length>0 && proton.State=="available"?" → "+proton.Latest:"")+
+                (proton.State=="error"?"\n"+proton.Error:"");
+        }
+        if(_checkProtonButton is not null)_checkProtonButton.IsEnabled=proton.State!="checking";
+        if(_installProtonButton is not null)
+        {
+            _installProtonButton.Content=UiKit.IconLabel(proton.State=="missing"?"Скачать CLI":"Обновить CLI");
+            _installProtonButton.IsEnabled=proton.State is "available" or "missing";
+        }
         var updates=DesktopPlatform.Current.Updates;
         var state=updates.Snapshot;
         var offerRepair=UpdateActionPolicy.OfferRepair(state,updates.IsReinstallReady);

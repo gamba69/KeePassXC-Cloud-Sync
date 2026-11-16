@@ -976,19 +976,52 @@ internal sealed partial class ShellWindow : Window
     }
     private async Task EditCloudAsync(CloudDraft? existing,string type="GoogleDrive")
     {
-        var dialog=new CloudDialog(existing?.Provider??type,existing,_draft.Poll,_configPath);
+        async Task<bool> PersistManagedChoiceAsync()
+        {
+            if(existing is null)return true; // New connections still require Save.
+            // Find by stable CloudId: SaveCloudDraftAsync refreshes draft objects.
+            var current=_draft.Clouds.FirstOrDefault(c=>c.CloudId==existing.CloudId &&
+                c.Provider=="ProtonDrive");
+            if(current is null)return false;
+            var previous=current.Executable;
+            if(previous.Length==0)return true;
+            current.Executable="";
+            try
+            {
+                if(await SaveCloudDraftAsync())return true;
+            }
+            catch
+            {
+                current.Executable=previous;
+                throw;
+            }
+            current.Executable=previous;
+            return false;
+        }
+        var dialog=new CloudDialog(existing?.Provider??type,existing,_draft.Poll,_configPath,
+            PersistManagedChoiceAsync);
         var edited=await dialog.ShowDialog<CloudDraft?>(this);
         if(edited is null)return;
         var before=_draft.Clone();
-        if(_draft.Clouds.Any(c=>c!=existing && c.Name.Equals(edited.Name,StringComparison.OrdinalIgnoreCase)))
+        // The managed-path callback can have persisted the cloud while this
+        // dialog was open, replacing CloudDraft object references.
+        var currentExisting=existing is null?null:_draft.Clouds.FirstOrDefault(c=>
+            c.CloudId==existing.CloudId);
+        if(existing is not null && currentExisting is null)
+        {
+            await MessageDialog.Info(this,"Изменить подключение",
+                UiLang.T("Подключение изменилось во время редактирования. Откройте его повторно."));
+            return;
+        }
+        if(_draft.Clouds.Any(c=>c!=currentExisting && c.Name.Equals(edited.Name,StringComparison.OrdinalIgnoreCase)))
         {await MessageDialog.Info(this,"Повторяющееся имя","Такое имя облака уже используется.");return;}
         if(existing is null)_draft.Clouds.Add(edited);
         else
         {
-            if(existing.Provider!=edited.Provider || existing.Remote!=edited.Remote ||
-               existing.BaseUrl!=edited.BaseUrl || existing.Root!=edited.Root)
+            if(currentExisting!.Provider!=edited.Provider || currentExisting.Remote!=edited.Remote ||
+               currentExisting.BaseUrl!=edited.BaseUrl || currentExisting.Root!=edited.Root)
                 edited.CloudId=Guid.NewGuid().ToString("N");
-            var i=_draft.Clouds.IndexOf(existing);if(i>=0)_draft.Clouds[i]=edited;
+            var i=_draft.Clouds.IndexOf(currentExisting!);if(i>=0)_draft.Clouds[i]=edited;
         }
         if(!await SaveCloudDraftAsync())_draft=before;
         RefreshCurrentPage();

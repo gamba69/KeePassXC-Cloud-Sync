@@ -1,7 +1,8 @@
 namespace KeyPassXCCloudSync;
 
 internal sealed record UpdatePreferences(bool CheckAutomatically = true,
-    bool DownloadAutomatically = true, string Installation = "exit");
+    bool DownloadAutomatically = true, string Installation = "exit",
+    bool CheckProtonCliAutomatically = true);
 
 internal sealed record UpdateSnapshot(string Status = "idle", string Version = "",
     string Detail = "", bool Unverified = false, bool Reinstall = false);

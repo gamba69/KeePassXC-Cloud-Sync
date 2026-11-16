@@ -19,6 +19,25 @@ static string FreshFolder()
     var dir=Path.Combine(Path.GetTempPath(),"KpSync-UpdateTests-"+Guid.NewGuid().ToString("N"));
     Directory.CreateDirectory(dir);return dir;
 }
+// When the managed CLI exists, automatic discovery selects it at the next
+// startup. Explicitly configured (even stale) paths never silently fall back.
+var protonLocatorSandbox=FreshFolder();
+try
+{
+    var app=Path.Combine(protonLocatorSandbox,"application");
+    var managed=Path.Combine(protonLocatorSandbox,"managed","proton-drive.exe");
+    Directory.CreateDirectory(app);
+    Directory.CreateDirectory(Path.GetDirectoryName(managed)!);
+    File.WriteAllText(managed,"fixture");
+    Check(ProtonCliLocator.Resolve("",app,null,"",managed)==managed,
+        "automatic startup resolves downloaded managed Proton CLI");
+    var stale=Path.Combine(protonLocatorSandbox,"old","proton-drive.exe");
+    Check(ProtonCliLocator.Resolve(stale,app,null,"",managed)==stale,
+        "stale explicit path is not silently replaced by a different Proton CLI");
+    Check(ProtonCliLocator.Resolve("",app,null,"",Path.Combine(app,"absent.exe"))=="",
+        "without managed CLI or PATH, automatic discovery reports missing");
+}
+finally {Directory.Delete(protonLocatorSandbox,true);}
 // The result journal survives cleanup, is isolated to each portable install,
 // and is not allowed to display fabricated success or multiline detail.
 var resultSandbox=FreshFolder();
@@ -488,10 +507,18 @@ finally {UpdateHelperBootstrap.Execute=null;}
     var handler=new ScriptedHandler(zipData,hash,releaseTag,immutable:false);
     using var updates=new WindowsUpdateService(handler,root);
     Check(updates.Preferences.CheckAutomatically && updates.Preferences.DownloadAutomatically &&
+        updates.Preferences.CheckProtonCliAutomatically &&
         updates.Preferences.Installation=="exit","safe default preferences");
-    updates.SavePreferences(new UpdatePreferences(true,true,"manual"));
+    updates.SavePreferences(new UpdatePreferences(true,true,"manual",false));
     using (var saved=new WindowsUpdateService(new ScriptedHandler(zipData,hash,releaseTag,false),root))
-        Check(saved.Preferences.Installation=="manual","local installation preference survives restart");
+        Check(saved.Preferences.Installation=="manual" &&
+            !saved.Preferences.CheckProtonCliAutomatically,
+            "local application and independent Proton CLI preferences survive restart");
+    File.WriteAllText(Path.Combine(root,"preferences.txt"),"true\ntrue\nmanual\n");
+    using (var legacy=new WindowsUpdateService(new ScriptedHandler(zipData,hash,releaseTag,false),root))
+        Check(legacy.Preferences.CheckProtonCliAutomatically &&
+            legacy.Preferences.Installation=="manual",
+            "legacy three-line settings retain Proton auto-check default");
     var progress=new RecordingUpdateProgress();
     await updates.CheckAsync(true,progress:progress);
     Check(progress.Events.FirstOrDefault()?.Phase=="checking" &&
@@ -750,6 +777,47 @@ finally {UpdateHelperBootstrap.Execute=null;}
     await RunBad("immutable release with missing attestation blocked",new ScriptedHandler(zipData,hash,releaseTag,true));
 }
 finally { Directory.Delete(temp,true); }
+
+// Proton's official index contains separate checksums for each architecture.
+var digestX64=new string('a',128);
+var digestArm=new string('b',128);
+var indexHtml="<h1>Proton Drive CLI 0.9.1</h1><table>"+
+    "<tr><td>windows/arm64</td><td><a href=\"https://proton.me/download/drive/cli/0.9.1/windows-arm64/proton-drive.exe\">arm</a></td><td><code>"+digestArm+"</code></td></tr>"+
+    "<tr><td>windows/x64</td><td><a href=\"https://proton.me/download/drive/cli/0.9.1/windows-x64/proton-drive.exe\">x64</a></td><td><code>"+digestX64+"</code></td></tr></table>";
+var protonX64=ProtonCliUpdater.ParseIndex(indexHtml,System.Runtime.InteropServices.Architecture.X64);
+var protonArm=ProtonCliUpdater.ParseIndex(indexHtml,System.Runtime.InteropServices.Architecture.Arm64);
+Check(protonX64.Version==new Version(0,9,1) && protonX64.Sha512==digestX64.ToUpperInvariant() &&
+    protonX64.Download.AbsolutePath.EndsWith("/windows-x64/proton-drive.exe",StringComparison.Ordinal),
+    "Proton CLI x64 release version, URL and SHA-512 belong to the same row");
+Check(protonArm.Sha512==digestArm.ToUpperInvariant() &&
+    protonArm.Download.AbsolutePath.EndsWith("/windows-arm64/proton-drive.exe",StringComparison.Ordinal),
+    "Proton CLI arm64 digest never borrows x64 digest");
+Rejected(()=>ProtonCliUpdater.ParseIndex(indexHtml.Replace("proton.me/download/drive", "example.org/download/drive"),
+    System.Runtime.InteropServices.Architecture.X64),"Proton download from non-official host rejected");
+Rejected(()=>ProtonCliUpdater.ParseIndex(indexHtml.Replace(digestX64,new string('z',128)),
+    System.Runtime.InteropServices.Architecture.X64),"Proton release without valid SHA-512 rejected");
+Rejected(()=>ProtonCliUpdater.ParseIndex(indexHtml.Replace("/windows-x64/proton-drive.exe", "/windows-arm64/proton-drive.exe"),
+    System.Runtime.InteropServices.Architecture.X64),"Proton mismatched platform URL rejected");
+Rejected(()=>ProtonCliUpdater.ParseIndex("<html>missing index</html>",
+    System.Runtime.InteropServices.Architecture.X64),"Proton malformed release index rejected");
+var activeProton=ProtonCliMaintenance.BeginUse();
+Check(ProtonCliMaintenance.TryBeginUpdate() is null,
+    "Proton CLI replacement rejected while remote store is active");
+activeProton.Dispose();
+var maintenance=ProtonCliMaintenance.TryBeginUpdate();
+Check(maintenance is not null,"Proton CLI replacement obtains an exclusive idle lease");
+using var useStarted=new ManualResetEventSlim(false);
+var worker=Task.Run(()=>
+{
+    useStarted.Set();
+    using var active=ProtonCliMaintenance.BeginUse();
+    return true;
+});
+Check(useStarted.Wait(TimeSpan.FromSeconds(2)),"Proton store worker started");
+await Task.Delay(40);
+Check(!worker.IsCompleted,"new Proton CLI sessions wait until replacement ends");
+maintenance!.Dispose();
+Check(await worker,"Proton CLI sessions resume after replacement");
 Console.WriteLine("[SUMMARY] UpdateTests completed.");
 
 sealed class RecordingUpdateProgress : IProgress<UpdateOperationProgress>

@@ -11,6 +11,8 @@ public sealed class ProtonDriveStore : IRemoteStore
     private readonly Config _cfg;
     private readonly string _exe;
     private readonly string _root;
+    private readonly IDisposable _usage;
+    private readonly FileStream _binaryLease;
     public ProtonDriveStore(Config cfg)
     {
         _cfg=cfg;
@@ -22,6 +24,14 @@ public sealed class ProtonDriveStore : IRemoteStore
         if(_root!=ProtonConfiguration.Root)
             throw new CloudTransportException("CONFIGURATION",CloudFailureKind.Configuration,
                 "Proton root must be /my-files");
+        _usage=ProtonCliMaintenance.BeginUse();
+        try
+        {
+            // A read-only no-delete share protects this executable across
+            // distinct application processes and configurations on Windows.
+            _binaryLease=new FileStream(_exe,FileMode.Open,FileAccess.Read,FileShare.Read);
+        }
+        catch { _usage.Dispose(); throw; }
     }
     private static string[] Components(string path)
     {
@@ -184,5 +194,9 @@ public sealed class ProtonDriveStore : IRemoteStore
            !doc.RootElement[0].TryGetProperty("ok",out var ok) || ok.ValueKind!=JsonValueKind.True)
             throw new SyncSafetyException("Proton CLI did not confirm trashing integration test folder");
     }
-    public void Dispose(){ }
+    public void Dispose()
+    {
+        _binaryLease.Dispose();
+        _usage.Dispose();
+    }
 }

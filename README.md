@@ -7,7 +7,7 @@
 [![Windows CI](https://img.shields.io/badge/CI-Windows%20NativeAOT-informational)](.github/workflows/windows.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-**Version:** 8.1.3 · **Platform:** Windows x64 · **Framework:** .NET 10, Avalonia 12 · **License:** MIT.
+**Version:** 8.2.2 · **Platform:** Windows x64 · **Framework:** .NET 10, Avalonia 12 · **License:** MIT.
 
 > **Development source — not production qualified.**
 > The application source has **not** been compiled or tested with real clouds;
@@ -90,7 +90,7 @@ site. The promotional collage above serves as the primary visual banner.
 1. Obtain the Windows x64 portable ZIP or build from source on Windows using `build.bat` and the .NET 10 SDK. The Proton Drive CLI is not included; obtain it separately from Proton if you use that provider.
 2. Make a separate offline backup of the encrypted `.kdbx` database and keep your KeePassXC key file separately.
 3. Launch `KeyPassXCCloudSync.exe` and select the existing local KDBX and a **separate** local state directory.
-4. Add one cloud connection in the **Clouds** tab; complete authorization. For Proton Drive, install the official CLI separately, place `proton-drive.exe` beside the app or on `PATH`, and authorize the CLI.
+4. Add one cloud connection in the **Clouds** tab; complete authorization. For Proton Drive, accept the optional download of the official CLI (verified against Proton's SHA-512), or select an existing `proton-drive.exe`; authorize it with Proton CLI.
 5. Save the configuration. In **Diagnostics**, run the isolated provider tests before enabling synchronization.
 6. Check the read-only preflight. An unavailable or unauthenticated cloud may be deferred if at least one cloud is fully verified and the verified revision graph is safe. Confirm the partial-coverage warning; no unverified replica is assumed current. Identity mismatches, unsafe topology or corrupt metadata still block activation. Watch for **SYNCED**, **PARTIAL**, **CONFLICT**, **NEEDS_AUTH**, or **ERROR**.
 7. Connect additional providers and computers one at a time; each computer must have its own local state folder and installation identity.

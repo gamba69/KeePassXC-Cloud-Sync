@@ -37,7 +37,7 @@ internal sealed class UpdateOperationWindow : Window
         ShowInTaskbar=true;
         WindowStartupLocation=WindowStartupLocation.CenterScreen;
         Icon=AppWindowIcons.White;
-        var heading=Localize(operation=="repair"?"repair":"update");
+        var heading=Localize(operation switch { "repair"=>"repair", "proton"=>"proton", _=>"update" });
         Title="KeyPassXC Cloud Sync — "+heading;
         _title=new TextBlock{Text=heading,FontSize=16,FontWeight=FontWeight.SemiBold};
         _versions=new TextBlock{Text=fromVersion==toVersion?fromVersion:fromVersion+" → "+toVersion,
@@ -74,6 +74,23 @@ internal sealed class UpdateOperationWindow : Window
         ("repair",_)=>"Восстановление программы",
         ("update","uk")=>"Оновлення програми",("update","en")=>"Application update",
         ("update",_)=>"Обновление программы",
+        ("proton","uk")=>"Оновлення Proton Drive CLI",("proton","en")=>"Proton Drive CLI update",
+        ("proton",_)=>"Обновление Proton Drive CLI",
+        ("checking-proton","uk")=>"Перевірка релізу Proton CLI…",
+        ("checking-proton","en")=>"Checking Proton CLI release…",
+        ("checking-proton",_)=>"Проверка релиза Proton CLI…",
+        ("downloading-proton","uk")=>"Завантаження Proton CLI…",
+        ("downloading-proton","en")=>"Downloading Proton CLI…",
+        ("downloading-proton",_)=>"Загрузка Proton CLI…",
+        ("verifying-proton","uk")=>"Перевірка SHA-512 та версії…",
+        ("verifying-proton","en")=>"Verifying SHA-512 and version…",
+        ("verifying-proton",_)=>"Проверка SHA-512 и версии…",
+        ("waiting-proton","uk")=>"Очікування завершення синхронізації Proton…",
+        ("waiting-proton","en")=>"Waiting for Proton synchronization to finish…",
+        ("waiting-proton",_)=>"Ожидание завершения синхронизации Proton…",
+        ("installing-proton","uk")=>"Безпечна заміна Proton CLI…",
+        ("installing-proton","en")=>"Safely replacing Proton CLI…",
+        ("installing-proton",_)=>"Безопасная замена Proton CLI…",
         ("cancel","uk")=>"Скасувати",("cancel","en")=>"Cancel",("cancel",_)=>"Отмена",
         ("close","uk")=>"Закрити",("close","en")=>"Close",("close",_)=>"Закрыть",
         ("preparing","uk")=>"Підготовка операції…",("preparing","en")=>"Preparing operation…",

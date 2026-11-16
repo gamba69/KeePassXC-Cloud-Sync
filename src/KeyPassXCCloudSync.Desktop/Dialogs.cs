@@ -141,8 +141,14 @@ internal sealed class CloudDialog : Window
     private readonly CloudDraft _draft;
     private readonly TextBox _name,_remote,_account,_clientId,_secret,_url,_user,_password,_executable,_timeout,_folderCache,_s3Endpoint,_s3Bucket,_s3Region,_s3Id,_s3Secret,_poll;
     private readonly StackPanel _google,_webdav,_proton,_s3;
-    internal CloudDialog(string provider,CloudDraft? source=null,int defaultPoll=60,string? configPath=null)
+    private readonly Func<Task<bool>>? _persistManagedChoice;
+    private readonly bool _initiallyConfiguredExecutable;
+    internal CloudDialog(string provider,CloudDraft? source=null,int defaultPoll=60,
+        string? configPath=null,Func<Task<bool>>? persistManagedChoice=null)
     {
+        _persistManagedChoice=persistManagedChoice;
+        _initiallyConfiguredExecutable=source is {Provider:"ProtonDrive"} &&
+            !string.IsNullOrWhiteSpace(source.Executable);
         _draft=source?.Clone()??new CloudDraft{Provider=provider,Name=SuggestName(provider),
             RefreshTarget="KeePassSync/Google/"+Guid.NewGuid().ToString("N")+"/refresh-token"};
         if(source is null)_draft.Poll=defaultPoll;
@@ -236,7 +242,7 @@ internal sealed class CloudDialog : Window
         _proton.IsVisible=provider=="ProtonDrive";
         _s3.IsVisible=provider is "S3" or "CloudflareR2";
         var actions=UiKit.Stack(9,Orientation.Horizontal);actions.HorizontalAlignment=HorizontalAlignment.Right;
-        actions.Children.Add(UiKit.Button("Сохранить подключение",()=>
+        actions.Children.Add(UiKit.Button("Сохранить подключение",async ()=>
         {
             try
             {
@@ -287,6 +293,7 @@ internal sealed class CloudDialog : Window
                 else
                 {
                     _draft.Account=""; // Proton CLI owns the signed-in account.
+                    if(!await EnsureProtonCliAsync(configPath))return;
                     _draft.Executable=_executable.Text?.Trim()??"";
                     if(_draft.Executable.Length>0)
                     {
@@ -315,8 +322,64 @@ internal sealed class CloudDialog : Window
         layout.Children.Add(new ScrollViewer{Content=form,
             VerticalScrollBarVisibility=Avalonia.Controls.Primitives.ScrollBarVisibility.Auto});
         Content=layout;
+        if(_draft.Provider=="ProtonDrive")
+            Opened+=async (_,_)=>{await EnsureProtonCliAsync(configPath);};
         KeyDown+=(_,e)=>{if(e.Key==Avalonia.Input.Key.Escape)
             {e.Handled=true;Close((CloudDraft?)null);}};
+    }
+    private bool _protonDownloadRunning;
+    private async Task<bool> EnsureProtonCliAsync(string? configPath)
+    {
+        if(_protonDownloadRunning)return false;
+        var requested=_executable.Text?.Trim()??"";
+        var resolved=PlatformServices.Current.Paths.ResolveProtonExecutable(requested,configPath);
+        if(resolved.Length>0 && File.Exists(resolved))return true;
+        _protonDownloadRunning=true;
+        try
+        {
+            // An old explicit path must not silently resolve to a different CLI.
+            // If a managed installation already exists, ask to use it
+            // rather than pretending another download is necessary.
+            if(requested.Length>0 && File.Exists(ProtonCliLocator.ManagedPath))
+            {
+                if(!await MessageDialog.AskAction(this,
+                    UiLang.T("Proton Drive CLI не найден"),
+                    UiLang.T("Старый путь к Proton CLI недоступен. Использовать копию из локальной папки приложения и сохранить автоматический поиск для этого подключения?"),
+                    UiLang.T("Использовать CLI")))return false;
+            }
+            else
+            {
+                if(!await MessageDialog.AskAction(this,
+                    UiLang.T("Proton Drive CLI не найден"),
+                    UiLang.T("Скачать официальный Proton Drive CLI с proton.me, проверить SHA-512 и сохранить в локальной папке приложения? Если был задан несуществующий пользовательский путь, он будет заменён автоматическим поиском."),
+                    UiLang.T("Скачать CLI")))return false;
+                var dialog=new UpdateOperationWindow("proton","","");
+                if(!await dialog.RunPreparationAsync(this,async token=>
+                {
+                    await ProtonCliUpdater.InstallAsync(configPath,true,()=>true,
+                        new Progress<UpdateOperationProgress>(dialog.SetProgress),token);
+                    return true;
+                }))return false;
+            }
+            // A new cloud is persisted by Save Connection. An existing cloud
+            // with a stale custom path needs its executable choice persisted
+            // immediately: Cancel/Close must not resurrect the missing path.
+            _executable.Text="";
+            if(_initiallyConfiguredExecutable && _persistManagedChoice is not null &&
+                !await _persistManagedChoice())
+            {
+                await MessageDialog.Info(this,UiLang.T("Proton Drive CLI"),
+                    UiLang.T("Автоматический путь Proton CLI не сохранён. Нажмите «Сохранить подключение»."));
+                return false;
+            }
+            return true;
+        }
+        catch(Exception ex)
+        {
+            await MessageDialog.Info(this,UiLang.T("Proton Drive CLI"),UiErrorDisplay.Present(ex));
+            return false;
+        }
+        finally{_protonDownloadRunning=false;}
     }
     private async Task BrowseProtonCliAsync()
     {

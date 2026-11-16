@@ -9,6 +9,35 @@ internal static class UiLang
     private static readonly Dictionary<string,(string Uk,string En)> Terms = new(StringComparer.Ordinal)
     {
         ["Обновления"] = ("Оновлення", "Updates"),
+        ["Proton Drive CLI не найден"] = ("Proton Drive CLI не знайдено", "Proton Drive CLI not found"),
+        ["Скачать CLI"] = ("Завантажити CLI", "Download CLI"),
+        ["Использовать CLI"] = ("Використати CLI", "Use CLI"),
+        ["Старый путь к Proton CLI недоступен. Использовать копию из локальной папки приложения и сохранить автоматический поиск для этого подключения?"] =
+            ("Старий шлях до Proton CLI недоступний. Використати копію з локальної папки застосунку й зберегти автоматичний пошук для цього підключення?",
+             "The configured Proton CLI path no longer exists. Use the copy in the application's local folder and save automatic discovery for this connection?"),
+        ["Автоматический путь Proton CLI не сохранён. Нажмите «Сохранить подключение»."] =
+            ("Автоматичний шлях Proton CLI не збережено. Натисніть «Зберегти підключення».",
+             "The automatic Proton CLI path was not saved. Click Save connection."),
+        ["Подключение изменилось во время редактирования. Откройте его повторно."] =
+            ("Підключення змінилося під час редагування. Відкрийте його повторно.",
+             "The connection changed while being edited. Open it again."),
+        ["Обновить CLI"] = ("Оновити CLI", "Update CLI"),
+        ["Проверить CLI"] = ("Перевірити CLI", "Check CLI"),
+        ["Обновление Proton Drive CLI"] = ("Оновлення Proton Drive CLI", "Proton Drive CLI update"),
+        ["Доступно обновление Proton Drive CLI"] = ("Доступне оновлення Proton Drive CLI", "Proton Drive CLI update available"),
+        ["Автоматически проверять обновления Proton CLI"] =
+            ("Автоматично перевіряти оновлення Proton CLI", "Automatically check Proton CLI updates"),
+        ["Проверка Proton CLI…"] = ("Перевірка Proton CLI…", "Checking Proton CLI…"),
+        ["Proton CLI: актуальная версия"] = ("Proton CLI: актуальна версія", "Proton CLI: up to date"),
+        ["Ошибка проверки Proton CLI"] = ("Помилка перевірки Proton CLI", "Proton CLI check error"),
+        ["Proton CLI: обновления не проверялись"] =
+            ("Proton CLI: оновлення не перевірялися", "Proton CLI: updates not checked"),
+        ["Скачать официальный Proton Drive CLI с proton.me, проверить SHA-512 и сохранить в локальной папке приложения? Если был задан несуществующий пользовательский путь, он будет заменён автоматическим поиском."] =
+            ("Завантажити офіційний Proton Drive CLI з proton.me, перевірити SHA-512 і зберегти в локальній папці програми? Якщо було вказано неіснуючий власний шлях, його буде замінено автоматичним пошуком.",
+             "Download the official Proton Drive CLI from proton.me, verify SHA-512 and save it in the application's local folder? Any missing custom path will be replaced with automatic discovery."),
+        ["Скачать и проверить новую версию Proton CLI, затем заменить исполняемый файл после завершения всех синхронизаций Proton? Перезапуск приложения не требуется."] =
+            ("Завантажити й перевірити нову версію Proton CLI, потім замінити виконуваний файл після завершення всіх синхронізацій Proton? Перезапуск програми не потрібен.",
+             "Download and verify the new Proton CLI, then replace the executable after all Proton synchronizations finish? The application does not need to restart."),
         ["Автоматически проверять обновления"] = ("Автоматично перевіряти оновлення", "Automatically check for updates"),
         ["Автоматически скачивать обновления"] = ("Автоматично завантажувати оновлення", "Automatically download updates"),
         ["Устанавливать обновление"] = ("Встановлювати оновлення", "Install updates"),
