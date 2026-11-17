@@ -185,6 +185,19 @@ internal static class CloudErrorPolicy
         status.RecoveryPending=false;
     }
 
+    // Saving repaired OS-backed credentials does not automatically unpause an
+    // old NEEDS_AUTH/AUTH_ERROR state. Proton is deliberately excluded: merely
+    // locating the CLI does not prove that its external session is authorized.
+    internal static bool ResumeAfterCredentialEdit(AppState state,CloudOptions cloud,
+        bool credentialsPresent,DateTimeOffset now)
+    {
+        if(!credentialsPresent || cloud.Provider=="ProtonDrive" ||
+           !state.Clouds.TryGetValue(cloud.Name,out var status) ||
+           status.State is not ("NEEDS_AUTH" or "AUTH_ERROR"))return false;
+        ResumeAfterLogin(state,cloud.Name,cloud.CloudId,now);
+        return true;
+    }
+
     // A successful login changes only the LOCAL scheduling state. The cursor,
     // DAG and backups survive; the next cycle is a mandatory full safety sweep.
     internal static void ResumeAfterLogin(AppState state,string cloudName,string cloudId,

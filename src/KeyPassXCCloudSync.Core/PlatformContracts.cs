@@ -35,7 +35,7 @@ internal interface IExternalBrowser
 internal interface IPlatformProcessLauncher
 {
     void OpenFolder(string path);
-    void StartProtonLogin(string executable);
+    Task<bool> StartProtonLoginAsync(string executable,CancellationToken cancellationToken);
 }
 internal interface IPlatformChangeMonitoring
 {

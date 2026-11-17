@@ -41,7 +41,7 @@ internal static class Program
     private sealed class TestProcesses : IPlatformProcessLauncher
     {
         public void OpenFolder(string path)=>throw new NotSupportedException("No OS shell in tests");
-        public void StartProtonLogin(string executable)
+        public Task<bool> StartProtonLoginAsync(string executable,CancellationToken cancellationToken)
             =>throw new NotSupportedException("No subprocesses in tests");
     }
     private sealed class NoopDisposable : IDisposable {public void Dispose(){} }

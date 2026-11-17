@@ -128,6 +128,7 @@ internal sealed class EngineHost : IDisposable
     }
     internal void ApplyConfig(AppOptions cfg,IDatabaseReservation? reservation=null)
     {
+        var previousConfig=_cfg;
         var identity=Identity(cfg.LocalFile);
         if(identity!=_mutexIdentity)
         {
@@ -148,6 +149,31 @@ internal sealed class EngineHost : IDisposable
         _cfg=cfg;
         _cloudRequests.Clear();
         Activity.Clear();
+        // A settings Save may rotate credentials at the SAME OS secret target.
+        // The serialized cloud options alone cannot detect that change. Retry
+        // only previously authentication-paused providers, and never assume a
+        // CLI executable means that a Proton session has been authenticated.
+        if(previousConfig is not null &&
+           string.Equals(previousConfig.StateFile,cfg.StateFile,
+               PlatformServices.Current.Paths.PathComparison))
+        {
+            var state=SyncStorage.LoadState(cfg.StateFile);
+            var now=DateTimeOffset.UtcNow;
+            var rechecking=false;
+            foreach(var cloud in cfg.Clouds)
+            {
+                if(cloud.Provider=="ProtonDrive" ||
+                   !state.Clouds.TryGetValue(cloud.Name,out var status) ||
+                   status.State is not ("NEEDS_AUTH" or "AUTH_ERROR"))continue;
+                rechecking|=CloudErrorPolicy.ResumeAfterCredentialEdit(state,cloud,
+                    TopologyCoordinator.IsAuthorized(cloud),now);
+            }
+            if(rechecking)
+            {
+                SyncStorage.SaveState(cfg.StateFile,state);
+                Updated?.Invoke(state);
+            }
+        }
         Interlocked.Exchange(ref _forceTopology,1);
         _watcher?.Dispose();_watcher=null;
         var dir=Path.GetDirectoryName(cfg.LocalFile)!;
@@ -172,20 +198,23 @@ internal sealed class EngineHost : IDisposable
     // Preserve remote cursors, version graphs and local immutable backups.
     internal async Task ResumeCloudAfterLoginAsync(string cloudId)
     {
-        var cfg=_cfg;
-        if(cfg is null)return;
-        var cloud=cfg.Clouds.FirstOrDefault(c=>c.CloudId==cloudId);
-        if(cloud is null)return;
+        var resumed=false;
         await Gate.WaitAsync();
         try
         {
+            // Configuration can change while external browser authorization runs.
+            // Resolve the current cloud under the same Gate as the state update.
+            var cfg=_cfg;
+            var cloud=cfg?.Clouds.FirstOrDefault(c=>c.CloudId==cloudId);
+            if(cfg is null || cloud is null)return;
             var state=SyncStorage.LoadState(cfg.StateFile);
             CloudErrorPolicy.ResumeAfterLogin(state,cloud.Name,cloud.CloudId,DateTimeOffset.UtcNow);
             SyncStorage.SaveState(cfg.StateFile,state);
             Updated?.Invoke(state);
+            resumed=true;
         }
         finally{Gate.Release();}
-        RequestCloudScan(cloudId);
+        if(resumed)RequestCloudScan(cloudId);
     }
     // An explicit cloud request never silently forces an all-provider scan.
     // A discovered change may still require the coordinator to check peers.

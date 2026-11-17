@@ -9,6 +9,17 @@ internal static class UiLang
     private static readonly Dictionary<string,(string Uk,string En)> Terms = new(StringComparer.Ordinal)
     {
         ["Обновления"] = ("Оновлення", "Updates"),
+        ["Вход в Proton Drive не подтверждён. Завершите авторизацию в браузере и повторите попытку."] =
+            ("Вхід до Proton Drive не підтверджено. Завершіть авторизацію у браузері й повторіть спробу.",
+             "Proton Drive sign-in was not confirmed. Complete browser sign-in and try again."),
+        ["Авторизация Proton Drive подтверждена. Проверяю облако…"] =
+            ("Авторизацію Proton Drive підтверджено. Перевіряю хмару…",
+             "Proton Drive authorization confirmed. Checking cloud…"),
+        ["Авторизация Proton Drive подтверждена. Проверка облака после включения синхронизации."] =
+            ("Авторизацію Proton Drive підтверджено. Перевірка хмари після ввімкнення синхронізації.",
+             "Proton Drive authorization confirmed. Cloud check will start when synchronization is enabled."),
+        ["Не удалось завершить авторизацию Proton CLI"] =
+            ("Не вдалося завершити авторизацію Proton CLI", "Could not complete Proton CLI authorization"),
         ["Proton Drive CLI не найден"] = ("Proton Drive CLI не знайдено", "Proton Drive CLI not found"),
         ["Скачать CLI"] = ("Завантажити CLI", "Download CLI"),
         ["Использовать CLI"] = ("Використати CLI", "Use CLI"),

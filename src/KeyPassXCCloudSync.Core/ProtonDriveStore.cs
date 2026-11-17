@@ -200,3 +200,30 @@ public sealed class ProtonDriveStore : IRemoteStore
         _usage.Dispose();
     }
 }
+
+// CLI login opens a browser and can outlive the launch call. Process exit is
+// not proof of authentication: confirm with an official, read-only Drive command.
+internal static class ProtonLoginFlow
+{
+    internal static async Task<bool> LoginAndVerifyAsync(
+        IPlatformProcessLauncher launcher,IPlatformCliRunner runner,
+        string executable,int timeoutSeconds,CancellationToken ct)
+    {
+        // Maintain the update exclusion lease until the last CLI command exits.
+        using var lease=await Task.Run(()=>ProtonCliMaintenance.BeginUse(),ct);
+        if(!await launcher.StartProtonLoginAsync(executable,ct))return false;
+        try
+        {
+            var listing=await runner.RunProtonAsync(executable,timeoutSeconds,ct,
+                "filesystem","list",ProtonConfiguration.Root,"--json");
+            using var document=JsonDocument.Parse(listing);
+            if(document.RootElement.ValueKind!=JsonValueKind.Array)
+                throw new SyncSafetyException("Unexpected Proton CLI session probe response");
+            return true;
+        }
+        catch(CloudTransportException e) when(e.Kind==CloudFailureKind.Authentication)
+        {
+            return false;
+        }
+    }
+}

@@ -77,6 +77,7 @@ internal sealed partial class ShellWindow : Window
     private readonly DispatcherTimer _placementRestoreTimer=new(){Interval=TimeSpan.FromMilliseconds(400)};
     private bool _switchingSync;
     private bool _testing,_saving,_authenticating;
+    private readonly CancellationTokenSource _protonLoginStop=new();
     private bool _showArchivedComputers;
     private bool _showArchivedClouds;
     private string UsageUiPath=>PlatformServices.Current.Paths.LocalUiFile(_configPath,"usage-ui.txt");
@@ -223,6 +224,7 @@ internal sealed partial class ShellWindow : Window
         _liveTimer.Start();
         Closed+=(_,_)=>
         {
+            _protonLoginStop.Cancel();
             _taskbarStatusIcons.Dispose();
             CancelProtectedDataScan();
             FlushWindowPlacement();

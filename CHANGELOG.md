@@ -4,6 +4,37 @@ All notable application and repository changes are recorded here, newest first.
 This is the only release-history document. All other documentation describes
 only the latest application behavior.
 
+## [8.2.4] - 2026-11-17
+
+### Fixed
+
+- Align the headless CloudNameTests process launcher with the asynchronous,
+  cancellation-aware Proton CLI login contract introduced in 8.2.3.
+- Restore the Windows CloudNameTests compilation gate (CS0535) without changing
+  runtime authentication, cloud synchronization or remote protocol behavior.
+
+## [8.2.3] - 2026-11-17
+
+### Fixed
+
+- Recheck previously auth-paused Google Drive and other credential-backed
+  connections when their saved credentials are edited, without requiring an
+  application restart. Resume as unverified until a real cloud scan succeeds;
+  preserve immutable revision history and remote cursors.
+- Wait for the external Proton Drive CLI browser-login process to exit, then
+  verify its actual session with a read-only `/my-files` listing. Only a
+  successful probe clears the obsolete authorization warning and queues the
+  independent cloud scan. Failed or canceled login never implies success.
+- Keep Proton login and its validation protected from concurrent CLI binary
+  replacement, and cancel the UI wait when its window closes.
+
+### Tests
+
+- Add credential-edit retry policy cases covering missing credentials,
+  paused authentication, Proton exclusion and preservation of vault history.
+- Add isolated Proton CLI login/verification cases for successful login,
+  interrupted login, authentication rejection and unrelated CLI errors.
+
 ## [8.2.2] - 2026-11-16
 
 ### Fixed

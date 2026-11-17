@@ -274,7 +274,7 @@ internal sealed partial class ShellWindow : Window
                     c.Provider=="GoogleDrive" && c.Account.Length>0);
                 var loginButton=c.Provider=="GoogleDrive"
                     ?Action(presentation.Label,()=>_=ConnectGoogleAsync(c),presentation.Primary,icon:"login")
-                    :Action(presentation.Label,()=>ProtonLogin(c),presentation.Primary,icon:"login");
+                    :Action(presentation.Label,()=>_=ProtonLoginAsync(c),presentation.Primary,icon:"login");
                 ToolTip.SetTip(loginButton,UiLang.T(presentation.Primary
                     ?"Требуется вход в облако":"Повторная авторизация облака"));
                 commands.Children.Add(loginButton);
@@ -1080,17 +1080,38 @@ internal sealed partial class ShellWindow : Window
         catch(Exception e){await MessageDialog.Info(this,"Ошибка авторизации Google",UiErrorDisplay.Present(e));}
         finally{_authenticating=false;RefreshCurrentPage();}
     }
-    private void ProtonLogin(CloudDraft c)
+    private async Task ProtonLoginAsync(CloudDraft c)
     {
+        if(_authenticating)return;
+        _authenticating=true;
         try
         {
             var executable=PlatformServices.Current.Paths.ResolveProtonExecutable(c.Executable,_configPath);
             if(executable.Length==0)throw new FileNotFoundException(
                 "Не найден proton-drive.exe рядом с программой или в PATH. Укажите путь к CLI в настройках Proton.");
             if(!File.Exists(executable))throw new FileNotFoundException("Не найден Proton Drive CLI",executable);
-            PlatformServices.Current.Processes.StartProtonLogin(executable);
+            var confirmed=await ProtonLoginFlow.LoginAndVerifyAsync(
+                PlatformServices.Current.Processes,PlatformServices.Current.Cli,
+                executable,c.Timeout,_protonLoginStop.Token);
+            if(!confirmed)
+            {
+                await MessageDialog.Info(this,"Proton Drive",
+                    "Вход в Proton Drive не подтверждён. Завершите авторизацию в браузере и повторите попытку.");
+                return;
+            }
+            // A CLI root listing verifies the session, not the KDBX replica.
+            // Show an unverified state and let the existing safe scan decide health.
+            var engine=_app.Engine;
+            if(engine is not null)await engine.ResumeCloudAfterLoginAsync(c.CloudId);
+            var result=engine?.SyncEnabled==true
+                ?"Авторизация Proton Drive подтверждена. Проверяю облако…"
+                :"Авторизация Proton Drive подтверждена. Проверка облака после включения синхронизации.";
+            _lastResult=UiLang.T(result);
+            await MessageDialog.Info(this,"Proton Drive",result);
         }
-        catch(Exception e){ShowProblem("Не удалось запустить Proton CLI",e.Message);}
+        catch(OperationCanceledException) when(_protonLoginStop.IsCancellationRequested){}
+        catch(Exception e){ShowProblem("Не удалось завершить авторизацию Proton CLI",e.Message);}
+        finally{_authenticating=false;if(!_protonLoginStop.IsCancellationRequested)RefreshCurrentPage();}
     }
     // The initial check and the post-confirmation check are READ-ONLY. Only the
     // second, unchanged result may authorize the local transition to enabled.

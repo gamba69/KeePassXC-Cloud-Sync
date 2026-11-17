@@ -34,8 +34,35 @@ internal static class Program
     private sealed class TestProcesses : IPlatformProcessLauncher
     {
         public void OpenFolder(string path)=>throw new NotSupportedException("No OS shell in tests");
-        public void StartProtonLogin(string executable)
+        public Task<bool> StartProtonLoginAsync(string executable,CancellationToken cancellationToken)
             =>throw new NotSupportedException("No subprocesses in tests");
+    }
+    private sealed class LoginProcess(bool succeeds) : IPlatformProcessLauncher
+    {
+        internal int Starts;
+        public void OpenFolder(string path)=>throw new NotSupportedException();
+        public Task<bool> StartProtonLoginAsync(string executable,CancellationToken cancellationToken)
+        {
+            Starts++;
+            if(executable!="test-proton-drive.exe")throw new Exception("Unexpected Proton binary");
+            return Task.FromResult(succeeds);
+        }
+    }
+    private sealed class LoginCli : IPlatformCliRunner
+    {
+        internal int Probes;
+        internal Exception? Failure;
+        internal string Output="[]";
+        public Task<string> RunProtonAsync(string executable,int timeoutSeconds,
+            CancellationToken cancellationToken,params string[] arguments)
+        {
+            Probes++;
+            if(executable!="test-proton-drive.exe" || timeoutSeconds!=37 ||
+               !arguments.SequenceEqual(new[]{"filesystem","list","/my-files","--json"}))
+                throw new Exception("Proton session probe must list only /my-files");
+            if(Failure is not null)throw Failure;
+            return Task.FromResult(Output);
+        }
     }
     private sealed class NoopDisposable : IDisposable {public void Dispose(){} }
     private sealed class TestChanges : IPlatformChangeMonitoring
@@ -176,8 +203,52 @@ internal static class Program
            legacy.Self.Clouds["cloud-1"].Total.MedianMilliseconds is not null)
             throw new Exception("Statistics transition must be stable after repeated loading");
     }
+    private static void VerifyProtonLogin()
+    {
+        var launched=new LoginProcess(true);
+        var cli=new LoginCli();
+        if(!ProtonLoginFlow.LoginAndVerifyAsync(launched,cli,"test-proton-drive.exe",37,
+               CancellationToken.None).GetAwaiter().GetResult() ||
+           launched.Starts!=1 || cli.Probes!=1)
+            throw new Exception("Successful login must be verified by an official read-only CLI command");
+
+        var stopped=new LoginProcess(false);
+        var uncalled=new LoginCli();
+        if(ProtonLoginFlow.LoginAndVerifyAsync(stopped,uncalled,"test-proton-drive.exe",37,
+               CancellationToken.None).GetAwaiter().GetResult() || uncalled.Probes!=0)
+            throw new Exception("Canceled or failed browser login must not probe or confirm auth");
+
+        var authFailure=new LoginCli
+        {
+            Failure=new CloudTransportException("PROTON_AUTH",CloudFailureKind.Authentication,"login required")
+        };
+        if(ProtonLoginFlow.LoginAndVerifyAsync(new LoginProcess(true),authFailure,
+               "test-proton-drive.exe",37,CancellationToken.None).GetAwaiter().GetResult())
+            throw new Exception("Proton auth errors must never confirm a session");
+
+        var malformed=new LoginCli{Output="not json"};
+        try
+        {
+            _=ProtonLoginFlow.LoginAndVerifyAsync(new LoginProcess(true),malformed,
+                "test-proton-drive.exe",37,CancellationToken.None).GetAwaiter().GetResult();
+            throw new Exception("Malformed Proton verification output was accepted");
+        }
+        catch(System.Text.Json.JsonException){}
+        var outage=new LoginCli{Failure=new IOException("Temporary connection failure")};
+        try
+        {
+            _=ProtonLoginFlow.LoginAndVerifyAsync(new LoginProcess(true),outage,
+                "test-proton-drive.exe",37,CancellationToken.None).GetAwaiter().GetResult();
+            throw new Exception("Non-auth transport errors must not be hidden as login rejection");
+        }
+        catch(IOException){}
+        if(ProtonCliMaintenance.TryBeginUpdate() is not { } update)
+            throw new Exception("Proton CLI login should release its updater lease");
+        update.Dispose();
+    }
     private static int Main()
     {
+        TestReporter.Run("ProtocolTests","Proton browser login verification",VerifyProtonLogin);
         TestReporter.Run("ProtocolTests","per-cloud telemetry",VerifyPerCloudTelemetry);
         PlatformServices.Configure(new Services());
         V2Diagnostics.Progress=Console.WriteLine;

@@ -140,10 +140,21 @@ internal sealed class WindowsProcessLauncher : IPlatformProcessLauncher
         Directory.CreateDirectory(path);
         Process.Start(new ProcessStartInfo(path){UseShellExecute=true});
     }
-    public void StartProtonLogin(string executable)
+    public async Task<bool> StartProtonLoginAsync(string executable,CancellationToken cancellationToken)
     {
         var psi=new ProcessStartInfo(executable){UseShellExecute=false,CreateNoWindow=false};
         psi.ArgumentList.Add("auth");psi.ArgumentList.Add("login");
-        Process.Start(psi);
+        using var process=Process.Start(psi)??throw new IOException("Could not launch Proton Drive login");
+        try { await process.WaitForExitAsync(cancellationToken); }
+        catch(OperationCanceledException) when(cancellationToken.IsCancellationRequested)
+        {
+            if(!process.HasExited)
+            {
+                process.Kill(entireProcessTree:true);
+                await process.WaitForExitAsync(CancellationToken.None);
+            }
+            throw;
+        }
+        return process.ExitCode==0;
     }
 }

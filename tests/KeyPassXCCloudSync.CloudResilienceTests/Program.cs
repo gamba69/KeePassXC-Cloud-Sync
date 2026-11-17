@@ -188,6 +188,25 @@ Verify("login clears pause and immediately schedules retry",!roundTrip.Clouds[cl
     roundTrip.NextCloudPollUtc[cloud.CloudId]==utc.AddHours(2));
 Verify("login forces full safety reconciliation",roundTrip.Clouds[cloud.Name].RecoveryPending &&
     roundTrip.V2Cursors[cloud.CloudId].WorkingRevision=="opaque-old-etag");
+var credentialsChanged=new AppState();
+var blocked=new ReplicaStatus();
+credentialsChanged.Clouds[cloud.Name]=blocked;
+CloudErrorPolicy.RecordFailure(credentialsChanged,cloud,blocked,expired,60,utc);
+Verify("credential edit without saved credential keeps the error",
+    !CloudErrorPolicy.ResumeAfterCredentialEdit(credentialsChanged,cloud,false,utc.AddMinutes(1)) &&
+    blocked.State=="AUTH_ERROR" && blocked.RetryPaused);
+Verify("Google credential edit clears stale auth pause without discarding identity",
+    CloudErrorPolicy.ResumeAfterCredentialEdit(credentialsChanged,cloud,true,utc.AddMinutes(2)) &&
+    blocked.State=="UNKNOWN" && blocked.RecoveryPending && !blocked.RetryPaused &&
+    credentialsChanged.NextCloudPollUtc[cloud.CloudId]==utc.AddMinutes(2));
+Verify("credential-edit retry does not clear non-auth failures",
+    !CloudErrorPolicy.ResumeAfterCredentialEdit(credentialsChanged,cloud,true,utc.AddMinutes(3)));
+var protonCloud=TestCloud("ProtonDrive","Proton");
+var protonStatus=new ReplicaStatus{State="NEEDS_AUTH",RetryPaused=true};
+credentialsChanged.Clouds[protonCloud.Name]=protonStatus;
+Verify("a Proton CLI executable alone cannot prove a logged-in session",
+    !CloudErrorPolicy.ResumeAfterCredentialEdit(credentialsChanged,protonCloud,true,utc.AddMinutes(4)) &&
+    protonStatus.State=="NEEDS_AUTH" && protonStatus.RetryPaused);
 CloudErrorPolicy.RecordSuccess(roundTrip.Clouds[cloud.Name]);
 Verify("verified scan clears all failure state",!roundTrip.Clouds[cloud.Name].RecoveryPending &&
     roundTrip.Clouds[cloud.Name].ConsecutiveFailures==0 &&
