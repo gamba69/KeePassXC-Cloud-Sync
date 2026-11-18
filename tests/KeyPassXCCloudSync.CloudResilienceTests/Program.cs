@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using KeyPassXCCloudSync;
+using CloudApi = KeePassXC.CloudTransport;
 
 // Deterministic fault matrix: fake exceptions and local state only. No live
 // credentials, cloud accounts, KeePassXC secrets or platform-specific APIs.
@@ -75,8 +76,14 @@ Verify("OAuth rate status",GoogleOAuthFailure.FromResponse(429,"{}").Kind==Cloud
 Verify("OAuth server failure",GoogleOAuthFailure.FromResponse(503,"{}").Kind==CloudFailureKind.Transient);
 Verify("OAuth oversized body fails closed",GoogleOAuthFailure.FromResponse(400,new string('x',9000)).Code=="OAUTH_CONFIGURATION");
 
-// Exercise the real token exchange through a fake HTTP handler, not merely the
-// response classifier. The test cannot reach the internet or access OS secrets.
+// Exercise the package's actual refresh-token flow over an isolated HTTP handler.
+// The host supplies synthetic secrets; no browser, real account or OS store is touched.
+var oauthOptions=new CloudApi.CloudConnectionOptions
+{
+    Provider=CloudApi.CloudProvider.GoogleDrive,GoogleClientId="synthetic-client",
+    GoogleRefreshTokenTarget="test/refresh",GoogleExpectedAccount="test@example.invalid"
+};
+var oauthServices=new CloudApi.CloudTransportServices{Secrets=new OAuthSecrets()};
 foreach(var (code,body,kind) in new[]
 {
     (HttpStatusCode.BadRequest,"""{"error":"invalid_grant"}""",CloudFailureKind.Authentication),
@@ -86,31 +93,35 @@ foreach(var (code,body,kind) in new[]
 })
 {
     using var fakeClient=new HttpClient(new OAuthHttpHandler(code,body));
-    var oauth=new GoogleOAuth(null!,fakeClient);
+    var oauth=new CloudApi.GoogleOAuthSession(oauthOptions,oauthServices,fakeClient);
     try
     {
-        using var ignored=await oauth.ExchangeAsync(new Dictionary<string,string>{
-            ["grant_type"]="refresh_token",["refresh_token"]="SYNTHETIC_ONLY"
-        },CancellationToken.None);
-        Verify("OAuth HTTP exchange must reject "+code,false);
+        _=await oauth.AccessTokenAsync(CancellationToken.None);
+        Verify("Package OAuth HTTP exchange must reject "+code,false);
     }
-    catch(CloudTransportException exception)
+    catch(CloudApi.CloudTransportException exception)
     {
-        Verify("OAuth HTTP exchange classifies "+code,exception.Kind==kind);
-        Verify("OAuth HTTP exchange does not reveal synthetic refresh token",
-            !exception.Message.Contains("SYNTHETIC_ONLY",StringComparison.Ordinal));
+        var mapped=CloudStoreFactory.Convert(exception);
+        Verify("Package OAuth HTTP exchange classifies "+code,mapped.Kind==kind);
+        Verify("Package OAuth response never reveals the synthetic refresh token",
+            !mapped.Message.Contains("SYNTHETIC_ONLY",StringComparison.Ordinal));
     }
 }
 using(var fakeClient=new HttpClient(new OAuthHttpHandler(HttpStatusCode.OK,
     """{"access_token":"FAKE","expires_in":3600}""")))
 {
-    var oauth=new GoogleOAuth(null!,fakeClient);
-    using var response=await oauth.ExchangeAsync(new Dictionary<string,string>{
-        ["grant_type"]="authorization_code",["code"]="SYNTHETIC_ONLY"
-    },CancellationToken.None);
-    Verify("OAuth HTTP success preserves valid token response",
-        response.RootElement.GetProperty("access_token").GetString()=="FAKE");
+    var oauth=new CloudApi.GoogleOAuthSession(oauthOptions,oauthServices,fakeClient);
+    Verify("Package OAuth refresh verifies account and returns access token",
+        await oauth.AccessTokenAsync(CancellationToken.None)=="FAKE");
 }
+Verify("Package concurrent writes block publication",
+    CloudStoreFactory.Convert(new CloudApi.CloudTransportException(
+        "CONCURRENT_WRITE",CloudApi.CloudFailureKind.ConcurrentWrite,"modified"))
+        .Kind==CloudFailureKind.Safety);
+Verify("Package unknown failures remain unsafe",
+    CloudStoreFactory.Convert(new CloudApi.CloudTransportException(
+        "UNKNOWN",CloudApi.CloudFailureKind.Unknown,"unknown"))
+        .Kind==CloudFailureKind.Unknown);
 
 Verify("startup preflight tolerates invalid OAuth token",
     PreflightAvailability.IsTemporary(TestCloud("GoogleDrive","OAuth"),expiredOauth()));
@@ -269,11 +280,25 @@ static CloudOptions TestCloud(string provider,string name)
         "",30,10,"auto",60,Guid.NewGuid().ToString("N"),false);
 }
 
+internal sealed class OAuthSecrets : CloudApi.ICloudSecretStore
+{
+    public (string User,string Password) Read(string target)
+    {
+        if(target!="test/refresh")throw new InvalidOperationException("Unexpected test credential target");
+        return ("synthetic-client","SYNTHETIC_ONLY");
+    }
+    public void Write(string target,string user,string secret)
+        =>throw new InvalidOperationException("No credential writes allowed in refresh tests");
+}
 internal sealed class OAuthHttpHandler(HttpStatusCode status,string responseBody) : HttpMessageHandler
 {
     protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
         CancellationToken cancellationToken)
     {
+        if(request.Method==HttpMethod.Get &&
+           request.RequestUri?.AbsoluteUri=="https://www.googleapis.com/drive/v3/about?fields=user(emailAddress)")
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK){
+                Content=new StringContent("""{"user":{"emailAddress":"test@example.invalid"}}""")});
         if(request.Method!=HttpMethod.Post ||
            request.RequestUri?.AbsoluteUri!="https://oauth2.googleapis.com/token")
             throw new InvalidOperationException("OAuth test sent a request to an unexpected endpoint");

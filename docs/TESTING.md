@@ -83,7 +83,7 @@ The Windows test runner explicitly decodes child process standard output and sta
 
 ## Partial-availability regression coverage
 
-The V2 protocol suite exercises activation preflight with a reachable fake cloud and an unauthenticated replica, stable double-check snapshots, the required failure when no cloud can be verified, actual `PARTIAL` engine publication, and rejection of an independently initialized foreign vault on reconnection. The transport classifier also ensures metadata, vault identity and conflict errors cannot be hidden as network outages. All tests operate on isolated temporary local files; they do not contact real cloud accounts.
+The V2 protocol suite exercises activation preflight with a reachable fake cloud and an unauthenticated replica, stable double-check snapshots, the required failure when no cloud can be verified, actual `PARTIAL` engine publication, and rejection of an independently initialized foreign vault on reconnection. The transport classifier also ensures metadata, vault identity and conflict errors cannot be hidden as network outages. The pinned KeePassXC.CloudTransport package is exercised with fake Google HTTP and Proton CLI host services. These automated tests operate on isolated temporary local files; they do not contact real cloud accounts. Proton live-cloud diagnostics currently require a package API that can safely remove a whole isolated test folder; version 1.0.2 lacks that operation and refuses to claim successful cleanup.
 
 ## Manual merge acceptance regression coverage
 

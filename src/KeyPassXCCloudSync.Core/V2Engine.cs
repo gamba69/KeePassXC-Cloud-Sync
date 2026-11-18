@@ -71,16 +71,7 @@ public sealed class V2Engine(AppOptions settings,SyncLog log,Action<string>? onA
                 ?new FileSystemTestStore(new Uri(cloud.BaseUrl).LocalPath)
                 :new FileSystemNoCasTestStore(new Uri(cloud.BaseUrl).LocalPath);
         }
-        var c=settings.AsTransportConfig(cloud);
-        IRemoteStore actual=cloud.Provider switch
-        {
-            "S3" or "CloudflareR2"=>new S3Store(c,onTransportProgress),
-            "WebDAV"=>new WebDavStore(c),
-            "GoogleDrive"=>new GoogleDriveStore(c,onTransportProgress),
-            "ProtonDrive"=>new ProtonDriveStore(c),
-            _=>throw new NotSupportedException(cloud.Provider)
-        };
-        return actual;
+        return CloudStoreFactory.Create(settings,cloud,onTransportProgress);
     }
     private IRemoteStore CreateMetered(CloudOptions cloud)
     {

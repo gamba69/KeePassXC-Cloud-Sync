@@ -1064,8 +1064,7 @@ internal sealed partial class ShellWindow : Window
             string address;
             try
             {
-                using var http=new HttpClient{Timeout=TimeSpan.FromSeconds(option.TimeoutSeconds)};
-                address=await new GoogleOAuth(cfg.AsTransportConfig(option),http).LoginAsync(CancellationToken.None);
+                address=await CloudStoreFactory.LoginGoogleAsync(cfg,option,CancellationToken.None);
             }
             finally{engine.Gate.Release();}
             cloud.Account=address;
@@ -1090,8 +1089,7 @@ internal sealed partial class ShellWindow : Window
             if(executable.Length==0)throw new FileNotFoundException(
                 "Не найден proton-drive.exe рядом с программой или в PATH. Укажите путь к CLI в настройках Proton.");
             if(!File.Exists(executable))throw new FileNotFoundException("Не найден Proton Drive CLI",executable);
-            var confirmed=await ProtonLoginFlow.LoginAndVerifyAsync(
-                PlatformServices.Current.Processes,PlatformServices.Current.Cli,
+            var confirmed=await CloudStoreFactory.LoginProtonAsync(
                 executable,c.Timeout,_protonLoginStop.Token);
             if(!confirmed)
             {

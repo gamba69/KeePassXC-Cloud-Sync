@@ -1,6 +1,6 @@
 # Synchronization protocol (wire schema 2)
 
-The **application source version** is `8.2.4` (development snapshot). The persistent remote protocol has **schema version 2**. They serve different purposes; the on-disk and remote schema is retained intentionally for safe access to vault data, not as application upgrade code. There is no automatic migration from unrelated remote layouts. The client refuses incompatible remote directories.
+The **application source version** is `9.0.1` (development snapshot). The persistent remote protocol has **schema version 2**. They serve different purposes; the on-disk and remote schema is retained intentionally for safe access to vault data, not as application upgrade code. There is no automatic migration from unrelated remote layouts. The client refuses incompatible remote directories.
 
 ## Remote layout
 

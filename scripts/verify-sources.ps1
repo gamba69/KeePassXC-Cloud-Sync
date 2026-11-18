@@ -58,7 +58,16 @@ try {
         Assert-Valid ($contracts.Contains("interface $contract")) "Platform contract $contract"
     }
     Assert-Valid ($core -match 'Changes\.WatchFile' -and $core -match 'Changes\.WatchNetwork' -and
-                  $core -match 'Cli\.RunProtonAsync') 'Core uses file, network and child-process abstractions'
+                  $core -match 'RunProtonAsync') 'Core uses file, network and child-process abstractions'
+    Assert-Valid ($core -match 'CloudTransportFactory.Create' -and
+                  $core -match 'IConditionalCloudTransport' -and
+                  $core -match 'CloudStoreFactory') 'All production clouds use the pinned NuGet transport'
+    Assert-Valid (-not (Test-Path './src/KeyPassXCCloudSync.Core/GoogleDriveStore.cs') -and
+                  -not (Test-Path './src/KeyPassXCCloudSync.Core/ProtonDriveStore.cs') -and
+                  -not (Test-Path './src/KeyPassXCCloudSync.Core/S3Store.cs') -and
+                  -not (Test-Path './src/KeyPassXCCloudSync.Core/WebDavStore.cs') -and
+                  -not (Test-Path './src/KeyPassXCCloudSync.Core/GoogleOAuth.cs')) 'Embedded production transports are removed'
+    Assert-Valid ($shared -notmatch '\b(?:GoogleDriveStore|ProtonDriveStore|S3Store|WebDavStore|GoogleOAuth)\b') 'Desktop uses the package transport adapter'
     Assert-Valid ($core -notmatch 'Environment\.MachineName') 'Core does not read host identity directly'
     Assert-Valid ($core -notmatch 'Environment\.GetFolderPath') 'Core has no OS-local data path lookup'
     Assert-Valid ($core -notmatch '\b(?:EffectiveDirectory|migration|legacy)\b') 'No historical migration adapters in Core'

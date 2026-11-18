@@ -131,7 +131,7 @@ public sealed class AppOptions
             {
                 if(!Uri.TryCreate(baseUrl,UriKind.Absolute,out var s3endpoint) || s3endpoint.Scheme!="https" ||
                     s3endpoint.UserInfo.Length>0 || s3endpoint.Query.Length>0 || s3endpoint.Fragment.Length>0 ||
-                    s3endpoint.AbsolutePath!="/" || !S3Store.ValidBucket(root))
+                    s3endpoint.AbsolutePath!="/" || !CloudStoreFactory.ValidBucket(root))
                     throw new FormatException($"[{s}] S3 requires HTTPS endpoint, existing bucket and CredentialTarget");
                 if(provider=="CloudflareR2" && !baseUrl.Contains(".r2.cloudflarestorage.com",StringComparison.OrdinalIgnoreCase))
                     throw new FormatException($"[{s}] Cloudflare R2 endpoint required");

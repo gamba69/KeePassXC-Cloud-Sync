@@ -8,7 +8,7 @@ The synchronization engine must remain independent of Avalonia, P/Invoke, Win32 
 
 ```text
 KeyPassXCCloudSync.Core (net10.0)
-  Domain models, protocol, cloud transports, configuration, safety, synchronization
+  Domain models, protocol, CloudStoreAdapter, configuration, safety, synchronization
   PlatformContracts.cs defines host-facing interfaces
         ^
         |   references the Core types; Core never references Desktop
@@ -31,7 +31,7 @@ No `DllImport`, `LibraryImport`, registry access, Win32 COM, or direct OS event 
 
 ## OS-neutral contracts
 
-Defined in `PlatformContracts.cs`: `IPlatformServices` exposes `ISecretStore`, `IAutostartService`, `IDatabaseLockService`, `IPlatformPaths`, `IExternalBrowser`, `IPlatformProcessLauncher`, `IPlatformChangeMonitoring` and `IPlatformCliRunner`. `EngineHost` uses `IPlatformChangeMonitoring.WatchFile`/`WatchNetwork` to wake the worker without importing OS-specific events. `ProtonDriveStore` constructs commands and parses responses; `IPlatformCliRunner` launches the process, drains stdout/stderr, enforces a timeout and terminates failed children. Test doubles implement the same contracts without touching real secrets or a real cloud.
+Defined in `PlatformContracts.cs`: `IPlatformServices` exposes `ISecretStore`, `IAutostartService`, `IDatabaseLockService`, `IPlatformPaths`, `IExternalBrowser`, `IPlatformProcessLauncher`, `IPlatformChangeMonitoring` and `IPlatformCliRunner`. `EngineHost` uses `IPlatformChangeMonitoring.WatchFile`/`WatchNetwork` to wake the worker without importing OS-specific events. `CloudStoreAdapter` delegates provider requests, OAuth and Proton CLI session verification to the pinned `KeePassXC.CloudTransport` NuGet package (1.0.2). `IPlatformCliRunner` launches the CLI process, drains stdout/stderr, enforces a timeout and terminates failed children. The application retains schema 2, independent remote directories, conflict policy, backups and scheduling. Test doubles implement host contracts without touching real secrets or a real cloud.
 
 Desktop-specific contracts in `DesktopPlatform.cs`: `IDesktopHost`, `ISystemAppearance`, `IInstanceCoordinator`, `IInstanceSession`, `ITaskbarStatusIcons`, `IDesktopNotifier`. The Windows platform composition root instantiates the concrete implementations. Both platform-service registration and per-config process ownership happen before the Avalonia main window starts.
 

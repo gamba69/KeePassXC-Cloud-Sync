@@ -277,7 +277,7 @@ internal sealed class CloudDialog : Window
                     _draft.S3SecretKey=_s3Secret.Text??"";
                     if(_draft.Provider=="CloudflareR2" && _draft.S3Region!="auto")
                         throw new ArgumentException("Cloudflare R2: регион подписи должен быть auto");
-                    if(!S3Store.ValidBucket(_draft.Root) || !S3Store.ValidRegion(_draft.S3Region))
+                    if(!CloudStoreFactory.ValidBucket(_draft.Root) || !CloudStoreFactory.ValidRegion(_draft.S3Region))
                         throw new ArgumentException("Неверный bucket или регион S3");
                     if(!Uri.TryCreate(_draft.BaseUrl,UriKind.Absolute,out var s3url) || s3url.Scheme!="https" ||
                        s3url.AbsolutePath!="/" || s3url.UserInfo.Length>0 || s3url.Query.Length>0 || s3url.Fragment.Length>0)

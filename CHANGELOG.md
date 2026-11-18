@@ -4,6 +4,43 @@ All notable application and repository changes are recorded here, newest first.
 This is the only release-history document. All other documentation describes
 only the latest application behavior.
 
+## [9.0.1] - 2026-11-18
+
+### Fixed
+
+- Allow the privacy audit to recognize exactly the five embedded provider source
+  files intentionally deleted by the 9.0.0 NuGet transport migration, even before
+  the Git working-tree deletions are staged.
+- Continue rejecting all other missing tracked sources; only skip a provider
+  file when Git confirms its deletion and the replacement adapter exists.
+- Preserve secret scanning, forbidden-path checks, and fail-closed audit errors.
+
+## [9.0.0] - 2026-11-18
+
+### Changed
+
+- Replace the embedded Google Drive, Proton Drive, S3/R2 and HTTPS WebDAV
+  transport implementations with the fixed KeePassXC.CloudTransport 1.0.2
+  NuGet package. Remove the bundled provider and Google OAuth HTTP clients.
+- Introduce a single host adapter that preserves provider identifiers, INI
+  credentials, Google Desktop OAuth identity, the existing remote path layout,
+  schema 2, conditional-write capabilities and error classifications.
+- Move Google OAuth exchange and Proton interactive login verification to the
+  reusable package. Share Proton CLI update-exclusion leases with the package.
+- Keep sync scheduling, immutable version history, conflict decisions, vault
+  preflight, backup retention and application UX in KeePassXC Cloud Sync.
+
+### Tests and constraints
+
+- Adapt isolated Google OAuth refresh-token and Proton CLI login regression
+  tests to exercise the packaged implementations; verify error classifications.
+- Require isolated cloud-test directory cleanup to be confirmed. Proton Drive
+  diagnostics cannot delete the isolated folder through package 1.0.2 and
+  therefore fail closed rather than claiming cleanup succeeded.
+- Preserve mandatory source audit checks and add a guard against reintroducing
+  embedded provider implementations. Windows CI and real-provider acceptance
+  remain required before release qualification.
+
 ## [8.2.4] - 2026-11-17
 
 ### Fixed

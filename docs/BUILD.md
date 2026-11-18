@@ -14,7 +14,7 @@ trigger is required. Releases still contain exactly the ZIP and SHA-256 files.
 - Windows x64 build machine with Windows SDK toolchain suitable for .NET 10 NativeAOT.
 - .NET 10 SDK installed for building (the published EXE does not require it).
 - PowerShell 5.1+; the scripts also support PowerShell 7 on Windows.
-- Internet access to restore NuGet dependencies in a clean checkout, unless a validated offline NuGet cache is available.
+- Internet access to restore NuGet dependencies in a clean checkout (including the pinned KeePassXC.CloudTransport 1.0.2), unless a validated offline NuGet cache is available.
 
 The application projects are `net10.0` (Core) and `net10.0-windows` (Desktop). Avalonia and SkiaSharp/HarfBuzz package versions are pinned in the project to avoid unreviewed native-binary combinations.
 

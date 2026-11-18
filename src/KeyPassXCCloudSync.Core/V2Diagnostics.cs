@@ -1050,11 +1050,5 @@ internal static class V2Diagnostics
         return failed==0 && passed==matching.Length?0:1;
     }
     private static IRemoteStore CreateProvider(AppOptions opt,CloudOptions cloud)
-    {
-        var cfg=opt.AsTransportConfig(cloud);
-        return cloud.Provider switch{
-            "GoogleDrive"=>new GoogleDriveStore(cfg),"WebDAV"=>new WebDavStore(cfg),
-            "S3" or "CloudflareR2"=>new S3Store(cfg),"ProtonDrive"=>new ProtonDriveStore(cfg),
-            _=>throw new NotSupportedException("Unsupported live cloud diagnostics provider")};
-    }
+        =>CloudStoreFactory.Create(opt,cloud);
 }

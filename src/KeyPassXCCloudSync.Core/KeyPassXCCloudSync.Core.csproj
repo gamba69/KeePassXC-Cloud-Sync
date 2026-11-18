@@ -11,4 +11,7 @@
     <IsAotCompatible>true</IsAotCompatible>
     <InvariantGlobalization>false</InvariantGlobalization>
   </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="KeePassXC.CloudTransport" Version="1.0.2" />
+  </ItemGroup>
 </Project>

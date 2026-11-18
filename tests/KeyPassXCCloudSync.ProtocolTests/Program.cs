@@ -3,6 +3,7 @@ using KeyPassXCCloudSync;
 // HEADLESS protocol regression tests. They cannot access real clouds or a working vault.
 internal static class Program
 {
+    private static string _testProtonBinary="";
     private sealed class Secrets : ISecretStore
     {
         public (string User,string Password) Read(string target)=>throw new SyncSafetyException("No test secret: "+target);
@@ -44,7 +45,7 @@ internal static class Program
         public Task<bool> StartProtonLoginAsync(string executable,CancellationToken cancellationToken)
         {
             Starts++;
-            if(executable!="test-proton-drive.exe")throw new Exception("Unexpected Proton binary");
+            if(executable!=_testProtonBinary)throw new Exception("Unexpected Proton binary");
             return Task.FromResult(succeeds);
         }
     }
@@ -57,7 +58,7 @@ internal static class Program
             CancellationToken cancellationToken,params string[] arguments)
         {
             Probes++;
-            if(executable!="test-proton-drive.exe" || timeoutSeconds!=37 ||
+            if(executable!=_testProtonBinary || timeoutSeconds!=37 ||
                !arguments.SequenceEqual(new[]{"filesystem","list","/my-files","--json"}))
                 throw new Exception("Proton session probe must list only /my-files");
             if(Failure is not null)throw Failure;
@@ -205,52 +206,64 @@ internal static class Program
     }
     private static void VerifyProtonLogin()
     {
-        var launched=new LoginProcess(true);
-        var cli=new LoginCli();
-        if(!ProtonLoginFlow.LoginAndVerifyAsync(launched,cli,"test-proton-drive.exe",37,
-               CancellationToken.None).GetAwaiter().GetResult() ||
-           launched.Starts!=1 || cli.Probes!=1)
-            throw new Exception("Successful login must be verified by an official read-only CLI command");
-
-        var stopped=new LoginProcess(false);
-        var uncalled=new LoginCli();
-        if(ProtonLoginFlow.LoginAndVerifyAsync(stopped,uncalled,"test-proton-drive.exe",37,
-               CancellationToken.None).GetAwaiter().GetResult() || uncalled.Probes!=0)
-            throw new Exception("Canceled or failed browser login must not probe or confirm auth");
-
-        var authFailure=new LoginCli
-        {
-            Failure=new CloudTransportException("PROTON_AUTH",CloudFailureKind.Authentication,"login required")
-        };
-        if(ProtonLoginFlow.LoginAndVerifyAsync(new LoginProcess(true),authFailure,
-               "test-proton-drive.exe",37,CancellationToken.None).GetAwaiter().GetResult())
-            throw new Exception("Proton auth errors must never confirm a session");
-
-        var malformed=new LoginCli{Output="not json"};
+        _testProtonBinary=Path.Combine(Path.GetTempPath(),"kpcs-proton-test-"+
+            Guid.NewGuid().ToString("N")+".exe");
+        File.WriteAllBytes(_testProtonBinary,[]);
         try
         {
-            _=ProtonLoginFlow.LoginAndVerifyAsync(new LoginProcess(true),malformed,
-                "test-proton-drive.exe",37,CancellationToken.None).GetAwaiter().GetResult();
-            throw new Exception("Malformed Proton verification output was accepted");
+            bool Login(IPlatformProcessLauncher process,IPlatformCliRunner cli)
+                =>CloudStoreFactory.LoginProtonAsync(_testProtonBinary,37,process,cli,
+                    CancellationToken.None).GetAwaiter().GetResult();
+            var launched=new LoginProcess(true);
+            var cli=new LoginCli();
+            if(!Login(launched,cli) || launched.Starts!=1 || cli.Probes!=1)
+                throw new Exception("Package Proton login must verify a read-only CLI listing");
+            var stopped=new LoginProcess(false);
+            var uncalled=new LoginCli();
+            if(Login(stopped,uncalled) || uncalled.Probes!=0)
+                throw new Exception("Canceled browser login must not probe Proton Drive");
+            var authFailure=new LoginCli
+            {
+                Failure=new KeePassXC.CloudTransport.CloudTransportException("PROTON_AUTH",
+                    KeePassXC.CloudTransport.CloudFailureKind.Authentication,"login required")
+            };
+            // A rejected probe is immediately unauthenticated. LoginAsync intentionally
+            // retries it for up to two minutes, so test the probe without that wait.
+            using(var authProbe=KeePassXC.CloudTransport.CloudTransportFactory.Create(
+                new KeePassXC.CloudTransport.CloudConnectionOptions
+                {
+                    Provider=KeePassXC.CloudTransport.CloudProvider.ProtonDrive,
+                    ProtonCliExecutable=_testProtonBinary,
+                    Timeout=TimeSpan.FromSeconds(37)
+                },CloudStoreFactory.Services(null,new LoginProcess(true),authFailure)))
+            {
+                if(authProbe.CheckConnectionAsync(CancellationToken.None).GetAwaiter().GetResult())
+                    throw new Exception("Proton authentication rejection must not confirm a session");
+            }
+            try
+            {
+                _=Login(new LoginProcess(true),new LoginCli{Output="not json"});
+                throw new Exception("Malformed Proton listing was accepted");
+            }
+            catch(System.Text.Json.JsonException){}
+            try
+            {
+                _=Login(new LoginProcess(true),new LoginCli{
+                    Failure=new IOException("Temporary connection failure")});
+                throw new Exception("Transient Proton failure was concealed");
+            }
+            catch(IOException){}
+            if(ProtonCliMaintenance.TryBeginUpdate() is not { } update)
+                throw new Exception("Proton login failed to release the package's CLI lease");
+            update.Dispose();
         }
-        catch(System.Text.Json.JsonException){}
-        var outage=new LoginCli{Failure=new IOException("Temporary connection failure")};
-        try
-        {
-            _=ProtonLoginFlow.LoginAndVerifyAsync(new LoginProcess(true),outage,
-                "test-proton-drive.exe",37,CancellationToken.None).GetAwaiter().GetResult();
-            throw new Exception("Non-auth transport errors must not be hidden as login rejection");
-        }
-        catch(IOException){}
-        if(ProtonCliMaintenance.TryBeginUpdate() is not { } update)
-            throw new Exception("Proton CLI login should release its updater lease");
-        update.Dispose();
+        finally { File.Delete(_testProtonBinary); }
     }
     private static int Main()
     {
+        PlatformServices.Configure(new Services());
         TestReporter.Run("ProtocolTests","Proton browser login verification",VerifyProtonLogin);
         TestReporter.Run("ProtocolTests","per-cloud telemetry",VerifyPerCloudTelemetry);
-        PlatformServices.Configure(new Services());
         V2Diagnostics.Progress=Console.WriteLine;
         var local=V2Diagnostics.Run();
         if(local!=0)return local;
