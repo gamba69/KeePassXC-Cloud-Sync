@@ -4,6 +4,55 @@ All notable application and repository changes are recorded here, newest first.
 This is the only release-history document. All other documentation describes
 only the latest application behavior.
 
+## [9.1.1] - 2026-11-22
+
+### Changed
+
+- Add Today as the initial period in the About performance selector; retain
+  Week, Month and All time in their existing order.
+- Add Today as the first row of all cloud and computer statistics summaries,
+  including the Status page and cloud/computer management views.
+- Calculate Today from the local calendar date using existing per-day usage
+  counters; preserve weekly/monthly and all-time totals and remote schema 2.
+- Localize the new period label in Russian, Ukrainian and English.
+
+### Tests
+
+- Check day, week, month and all-time boundaries (including future and invalid
+  date keys), first-row presentation and the default performance selection.
+
+## [9.1.0] - 2026-11-22
+
+### Changed
+
+- Upgrade KeePassXC.CloudTransport from 1.0.2 to 1.0.4 and use its host-owned
+  Google OAuth callback page customization instead of an unused local HTTP writer.
+- Match KeePassXC Card Print's self-contained result page design with distinct
+  success/failure states, RU/UK/EN text, and the application's selected theme.
+- Keep OAuth listeners, credentials and token exchange within CloudTransport;
+  render no account details, tokens, remote resources or scripts in result HTML.
+
+### Tests
+
+- Replace obsolete HTTP-writer assertions with callback HTML localization,
+  theme, status, safe-markup and package callback-API contract coverage.
+- Preserve the existing Google Desktop OAuth identity check. Windows CI and
+  real-provider OAuth acceptance remain required before release qualification.
+
+### Interface
+
+- Place the full-width application update status and check/install/repair actions
+  first on About, above cloud performance, as in KeePassXC Card Print.
+- Keep automatic checks, automatic download and installation mode in Settings;
+  keep Proton Drive CLI maintenance and its preferences there as well.
+- Reflow update actions below the status on narrow windows. Refresh application
+  and Proton statuses independently when the user switches pages.
+
+### UI tests
+
+- Check the About update panel layout, action availability and section order
+  with headless UI tests, while preserving performance and credits assertions.
+
 ## [9.0.1] - 2026-11-18
 
 ### Fixed

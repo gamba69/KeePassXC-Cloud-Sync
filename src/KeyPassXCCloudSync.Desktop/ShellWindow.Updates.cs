@@ -48,12 +48,7 @@ internal sealed partial class ShellWindow
                 updates.SavePreferences(updates.Preferences with { Installation=choices[modes.SelectedIndex].Item1 });
         };
         root.Children.Add(modes);
-        _updateStatus = Text("",12,false,Secondary);
-        root.Children.Add(_updateStatus);
-        _checkUpdatesButton=Action("Проверить обновления",()=>_=CheckForUpdateAsync());
-        _installUpdateButton=Action("Установить сейчас",()=>_=ConfirmInstallUpdateAsync());
-        _repairUpdateButton=Action("Восстановить…",()=>_=RestoreCurrentVersionAsync());
-        root.Children.Add(Row(_checkUpdatesButton,_installUpdateButton,_repairUpdateButton));
+        // Application update actions live on About; only policies remain here.
         root.Children.Add(Text(UiLang.T("Proton Drive CLI"),14,true));
         var protonAutomatic=new CheckBox
         {
@@ -78,7 +73,8 @@ internal sealed partial class ShellWindow
 
     internal void RefreshUpdateStatus()
     {
-        if (_updateStatus is null) return;
+        // Settings only owns Proton controls; About owns app-update controls.
+        // Both statuses must refresh even when the other page is not visible.
         var proton=ProtonCliUpdater.Status;
         if(_protonUpdateStatus is not null)
         {
@@ -127,9 +123,10 @@ internal sealed partial class ShellWindow
             "error"=>"Ошибка обновления",
             _=>"Обновления не проверялись"
         };
-        _updateStatus.Text=UiLang.T(key)+(state.Version.Length>0?" · "+state.Version:"")+
-            (state.Unverified?"\n"+UiLang.T("GitHub Immutable Releases отключён: подлинность обновления не подтверждена."):"")+
-            (state.Status=="error"?"\n"+state.Detail:"");
+        if(_updateStatus is not null)
+            _updateStatus.Text=UiLang.T(key)+(state.Version.Length>0?" · "+state.Version:"")+
+                (state.Unverified?"\n"+UiLang.T("GitHub Immutable Releases отключён: подлинность обновления не подтверждена."):"")+
+                (state.Status=="error"?"\n"+state.Detail:"");
     }
 
     private async Task CheckForUpdateAsync()
@@ -195,5 +192,62 @@ internal sealed partial class ShellWindow
             UiLang.T(repair?"Восстановление приложения":"Установить обновление"),description,
             UiLang.T(repair?"Восстановить":"Установить обновление")))
             await _app.InstallReadyUpdateAsync(true,userConfirmed:true);
+    }
+
+    // First full-width About strip: current status left, actions right.
+    // Installation and repair use the exact existing confirmation/safety flow.
+    private Control BuildApplicationUpdates()
+    {
+        var layout=new Grid
+        {
+            Name="AboutUpdateLayout",
+            ColumnDefinitions=new ColumnDefinitions("*,Auto"),
+            RowDefinitions=new RowDefinitions("Auto,Auto"),
+            ColumnSpacing=12,RowSpacing=3
+        };
+        layout.Children.Add(Text(UiLang.T("Обновления приложения"),14,true));
+        _updateStatus=Text("",11,false,Secondary);
+        _updateStatus.Name="AboutUpdateStatus";
+        _updateStatus.TextWrapping=Avalonia.Media.TextWrapping.Wrap;
+        _updateStatus.VerticalAlignment=VerticalAlignment.Center;
+        Grid.SetRow(_updateStatus,1);
+        layout.Children.Add(_updateStatus);
+
+        _checkUpdatesButton=Action("Проверить обновления",()=>_=CheckForUpdateAsync(),icon:"refresh");
+        _checkUpdatesButton.Name="AboutUpdateCheckButton";
+        _installUpdateButton=Action("Установить сейчас",()=>_=ConfirmInstallUpdateAsync(),icon:"check");
+        _installUpdateButton.Name="AboutUpdateInstallButton";
+        _repairUpdateButton=Action("Восстановить…",()=>_=RestoreCurrentVersionAsync(),icon:"history");
+        _repairUpdateButton.Name="AboutUpdateRepairButton";
+        var actions=new WrapPanel
+        {
+            Name="AboutUpdateActions",Orientation=Orientation.Horizontal,
+            ItemSpacing=7,LineSpacing=5,
+            HorizontalAlignment=HorizontalAlignment.Right,
+            VerticalAlignment=VerticalAlignment.Center
+        };
+        actions.Children.Add(_checkUpdatesButton);
+        actions.Children.Add(_installUpdateButton);
+        actions.Children.Add(_repairUpdateButton);
+        Grid.SetColumn(actions,1);
+        Grid.SetRowSpan(actions,2);
+        layout.Children.Add(actions);
+        bool? previousCompact=null;
+        layout.SizeChanged+=(_,e)=>
+        {
+            var compact=e.NewSize.Width<680;
+            if(previousCompact==compact)return;
+            previousCompact=compact;
+            layout.ColumnDefinitions=new ColumnDefinitions(compact?"*":"*,Auto");
+            layout.RowDefinitions=new RowDefinitions(compact?"Auto,Auto,Auto":"Auto,Auto");
+            Grid.SetColumn(actions,compact?0:1);
+            Grid.SetRow(actions,compact?2:0);
+            Grid.SetRowSpan(actions,compact?1:2);
+            actions.HorizontalAlignment=compact?HorizontalAlignment.Left:HorizontalAlignment.Right;
+        };
+        RefreshUpdateStatus();
+        var card=AboutCard(layout);
+        card.Name="AboutUpdatesCard";
+        return card;
     }
 }

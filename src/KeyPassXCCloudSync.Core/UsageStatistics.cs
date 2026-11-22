@@ -202,11 +202,19 @@ internal static class UsageStatistics
         ApplyLocalTotals(usage,settings,state);
         Save(settings,usage);
     }
-    internal static V2OperationTotals Period(UsageCloud cloud,string period)
+    // Daily buckets use the computer's local calendar date (yyyy-MM-dd).
+    // The optional date is solely for deterministic boundary regression tests.
+    internal static V2OperationTotals Period(UsageCloud cloud,string period,DateTime? localToday=null)
     {
         if(period=="all")return cloud.Total.Copy();
-        var now=DateTime.Today;
-        var start=period=="week"?now.AddDays(-((int)now.DayOfWeek+6)%7):new DateTime(now.Year,now.Month,1);
+        var now=(localToday??DateTime.Today).Date;
+        var start=period switch
+        {
+            "today"=>now,
+            "week"=>now.AddDays(-((int)now.DayOfWeek+6)%7),
+            "month"=>new DateTime(now.Year,now.Month,1),
+            _=>throw new ArgumentOutOfRangeException(nameof(period),period,"Unknown statistics period")
+        };
         var total=new V2OperationTotals();
         foreach(var (date,value) in cloud.Days)
             if(DateTime.TryParseExact(date,"yyyy-MM-dd",System.Globalization.CultureInfo.InvariantCulture,

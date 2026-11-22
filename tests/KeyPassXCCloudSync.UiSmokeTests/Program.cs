@@ -279,7 +279,9 @@ internal static class Program
             CheckNavigationChrome(shell);
             Pass("Card Print tab frame, palette and centered footer");
             CheckAboutPresentation(shell);
-            Pass("About: performance first, equal-height columns and percentile notation");
+            Pass("About: updates, daily-first performance and percentile notation");
+            CheckUsagePeriodRows(shell);
+            Pass("Statistics: Today appears first on cloud/computer summary cards");
             shell.NavigateTo(0);
             CheckOverviewStatusBar(shell);
             Pass("Overview: full status text, readable actions and adaptive metadata");
@@ -613,12 +615,38 @@ internal static class Program
         var page=ActivePage(shell);
         var scroller=page.GetLogicalDescendants().OfType<ScrollViewer>().FirstOrDefault();
         var sections=(scroller?.Content as StackPanel)?.Children;
-        Check("performance appears immediately after About identity",
-            sections is not null && sections.Count==3 &&
-            sections[1].GetLogicalDescendants().OfType<TextBlock>()
+        var updateCard=sections is { Count:4 } ? sections[1] as Border : null;
+        var updateLayout=updateCard?.GetLogicalDescendants().OfType<Grid>()
+            .FirstOrDefault(g=>g.Name=="AboutUpdateLayout");
+        var updateActions=updateLayout?.Children.OfType<WrapPanel>()
+            .FirstOrDefault(p=>p.Name=="AboutUpdateActions");
+        Check("application updates appear first in their own full-width About strip",
+            updateCard?.Name=="AboutUpdatesCard" && updateLayout is not null &&
+            updateLayout.ColumnDefinitions.Count==2 && updateLayout.RowDefinitions.Count==2 &&
+            updateActions is not null && Grid.GetColumn(updateActions)==1 &&
+            Grid.GetRowSpan(updateActions)==2);
+        Check("application update actions and result status live on About",
+            updateActions is not null && updateActions.Children.OfType<Button>()
+                .Select(b=>b.Name).OrderBy(n=>n).SequenceEqual(new[]
+                {
+                    "AboutUpdateCheckButton","AboutUpdateInstallButton","AboutUpdateRepairButton"
+                }) &&
+            updateLayout?.GetLogicalDescendants().OfType<TextBlock>()
+                .Any(t=>t.Name=="AboutUpdateStatus") == true);
+        Check("performance appears immediately after About update strip",
+            sections is not null && sections.Count==4 &&
+            sections[2].GetLogicalDescendants().OfType<TextBlock>()
                 .Any(t=>new[]{"Производительность облачных подключений",
                     "Продуктивність хмарних підключень","Cloud connection performance"}
                     .Contains(t.Text,StringComparer.Ordinal)));
+        var periodSelector=sections?[2].GetLogicalDescendants().OfType<ComboBox>()
+            .FirstOrDefault(c=>c.Name=="AboutPerformancePeriod");
+        Check("About performance starts with Today and offers all four periods",
+            periodSelector is {SelectedIndex:0} &&
+            periodSelector.ItemsSource is ComboBoxItem[] options &&
+            options.Select(item=>item.Tag as string).SequenceEqual(new[]
+                {"today","week","month","all"}) &&
+            (periodSelector.SelectedItem as ComboBoxItem)?.Content?.ToString()==UiLang.T("Сегодня"));
         var identity=sections?[0] as Grid;
         var aboutCredits=identity?.GetLogicalDescendants().OfType<WrapPanel>()
             .FirstOrDefault(p=>p.Name=="AboutCreditsRow");
@@ -626,7 +654,7 @@ internal static class Program
         var version=typeof(ShellWindow).Assembly.GetName().Version?.ToString(3)??"unknown";
         Check("About metadata row is directly under product title",
             page is Grid aboutGrid && aboutGrid.RowDefinitions.Count==0 &&
-            sections is not null && sections.Count==3 && identity is not null &&
+            sections is not null && sections.Count==4 && identity is not null &&
             identity.GetLogicalDescendants().OfType<StackPanel>().Any(intro=>
                 intro.Children.Count==3 &&
                 intro.Children[1]==aboutCredits &&
@@ -678,6 +706,21 @@ internal static class Program
                      explanation.Contains("Медиан",StringComparison.OrdinalIgnoreCase) ||
                      explanation.Contains("Медіан",StringComparison.OrdinalIgnoreCase))));
         shell.NavigateTo(0);
+    }
+    private static void CheckUsagePeriodRows(ShellWindow shell)
+    {
+        // The same control is reused by Status, Clouds and Computers.
+        var grid=shell.UsageRows(_=>new V2OperationTotals()) as Grid;
+        var labels=grid?.Children.OfType<TextBlock>()
+            .Where(t=>Grid.GetColumn(t)==0 && Grid.GetRow(t)>0)
+            .OrderBy(Grid.GetRow).Select(t=>t.Text).ToArray();
+        Check("all summary tables have four ordered rows, Today first",
+            grid is {Name:"UsagePeriodGrid"} && grid.RowDefinitions.Count==5 &&
+            labels is not null && labels.SequenceEqual(new[]
+            {
+                UiLang.T("Сегодня"),UiLang.T("Неделя"),
+                UiLang.T("Месяц"),UiLang.T("Всего")
+            }));
     }
     private static Control ActivePage(ShellWindow shell)
     {

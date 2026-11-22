@@ -96,7 +96,9 @@ internal sealed partial class ShellWindow : Window
         introduction.Children.Add(Muted(UiLang.T("Синхронизация зашифрованных баз KeePassXC (.kdbx) через независимые облачные подключения — без расшифровки содержимого базы."),11));
         Grid.SetColumn(introduction,1);identity.Children.Add(introduction);
         content.Children.Add(identity);
-        // The operational metrics are the most useful About section.
+        // Match Card Print: the application update strip spans the entire width,
+        // above performance and the lower detail cards.
+        content.Children.Add(BuildApplicationUpdates());
         content.Children.Add(AboutCloudPerformance());
 
         // One left card spans both right-hand cards. Unlike a StackPanel in
@@ -203,11 +205,13 @@ internal sealed partial class ShellWindow : Window
         header.Children.Add(Text(UiLang.T("Производительность облачных подключений"),14,true));
         var periods=new[]
         {
+            new ComboBoxItem{Content=UiLang.T("Сегодня"),Tag="today"},
             new ComboBoxItem{Content=UiLang.T("Неделя"),Tag="week"},
             new ComboBoxItem{Content=UiLang.T("Месяц"),Tag="month"},
             new ComboBoxItem{Content=UiLang.T("Всего"),Tag="all"}
         };
-        var period=new ComboBox{ItemsSource=periods,SelectedIndex=0,MinWidth=88,MinHeight=29};
+        var period=new ComboBox{Name="AboutPerformancePeriod",ItemsSource=periods,
+            SelectedIndex=0,MinWidth=100,MinHeight=29};
         Grid.SetColumn(period,1);header.Children.Add(period);
         // The refresh handler closes over the table. Initialize it BEFORE
         // creating the delegate to satisfy definite-assignment analysis.
@@ -227,7 +231,7 @@ internal sealed partial class ShellWindow : Window
         stack.Children.Add(Muted(UiLang.T("Показатели на этом компьютере; накопительная статистика уже доступна на вкладке «Облака». До появления измерений отображается «Нет данных»."),10));
         void RefreshPerformance()
         {
-            var selected=(period.SelectedItem as ComboBoxItem)?.Tag as string??"week";
+            var selected=(period.SelectedItem as ComboBoxItem)?.Tag as string??"today";
             table.Content=BuildCloudPerformanceTable(selected);
         }
         period.SelectionChanged+=(_,_)=>RefreshPerformance();

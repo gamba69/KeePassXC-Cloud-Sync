@@ -12,6 +12,6 @@
     <InvariantGlobalization>false</InvariantGlobalization>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="KeePassXC.CloudTransport" Version="1.0.2" />
+    <PackageReference Include="KeePassXC.CloudTransport" Version="1.0.4" />
   </ItemGroup>
 </Project>

@@ -9,6 +9,7 @@ internal static class UiLang
     private static readonly Dictionary<string,(string Uk,string En)> Terms = new(StringComparer.Ordinal)
     {
         ["Обновления"] = ("Оновлення", "Updates"),
+        ["Обновления приложения"] = ("Оновлення програми", "Application updates"),
         ["Вход в Proton Drive не подтверждён. Завершите авторизацию в браузере и повторите попытку."] =
             ("Вхід до Proton Drive не підтверджено. Завершіть авторизацію у браузері й повторіть спробу.",
              "Proton Drive sign-in was not confirmed. Complete browser sign-in and try again."),
@@ -235,6 +236,7 @@ internal static class UiLang
         ["Сохранить"] = ("Зберегти", "Save"),
 
         ["Период"] = ("Період", "Period"),
+        ["Сегодня"] = ("Сьогодні", "Today"),
         ["Неделя"] = ("Тиждень", "Week"),
         ["Месяц"] = ("Місяць", "Month"),
         ["Всего"] = ("Усього", "All time"),

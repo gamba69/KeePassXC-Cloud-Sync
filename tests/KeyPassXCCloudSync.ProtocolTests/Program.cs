@@ -204,6 +204,46 @@ internal static class Program
            legacy.Self.Clouds["cloud-1"].Total.MedianMilliseconds is not null)
             throw new Exception("Statistics transition must be stable after repeated loading");
     }
+    private static void VerifyUsagePeriods()
+    {
+        // Sunday 22 Nov: current week starts Monday 16 Nov, month on 1 Nov.
+        // Explicit reference date keeps the test stable across time zones/midnight.
+        var today=new DateTime(2026,11,22);
+        var cloud=new UsageCloud
+        {
+            Total=new V2OperationTotals{Get=31,DownloadBytes=31*1024},
+            Days=new Dictionary<string,V2OperationTotals>
+            {
+                ["2026-11-22"]=new(){Get=1,DownloadBytes=1024},
+                ["2026-11-21"]=new(){Get=2,DownloadBytes=2*1024},
+                ["2026-11-16"]=new(){Get=4,DownloadBytes=4*1024},
+                ["2026-11-01"]=new(){Get=8,DownloadBytes=8*1024},
+                ["2026-10-31"]=new(){Get=16,DownloadBytes=16*1024},
+                // Future or malformed keys must never be counted in a period.
+                ["2026-11-23"]=new(){Get=64},
+                ["invalid-date"]=new(){Get=128}
+            }
+        };
+        foreach(var (period,expected) in new[]
+        {
+            ("today",1L),("week",7L),("month",15L),("all",31L)
+        })
+        {
+            var totals=UsageStatistics.Period(cloud,period,today);
+            if(totals.Get!=expected || totals.DownloadBytes!=expected*1024)
+                throw new Exception("Incorrect "+period+" daily statistics boundary");
+        }
+        if(UsageStatistics.Period(cloud,"today",today.AddDays(1)).Get!=64)
+            throw new Exception("Today must follow the selected local calendar date");
+        if(UsageStatistics.Period(cloud,"today",today.AddDays(-30)).Get!=0)
+            throw new Exception("An empty date must have zero daily statistics");
+        try
+        {
+            UsageStatistics.Period(cloud,"unexpected",today);
+            throw new Exception("An unsupported period silently returned another period");
+        }
+        catch(ArgumentOutOfRangeException){}
+    }
     private static void VerifyProtonLogin()
     {
         _testProtonBinary=Path.Combine(Path.GetTempPath(),"kpcs-proton-test-"+
@@ -264,6 +304,7 @@ internal static class Program
         PlatformServices.Configure(new Services());
         TestReporter.Run("ProtocolTests","Proton browser login verification",VerifyProtonLogin);
         TestReporter.Run("ProtocolTests","per-cloud telemetry",VerifyPerCloudTelemetry);
+        TestReporter.Run("ProtocolTests","daily/week/month/all periods",VerifyUsagePeriods);
         V2Diagnostics.Progress=Console.WriteLine;
         var local=V2Diagnostics.Run();
         if(local!=0)return local;

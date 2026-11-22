@@ -101,23 +101,23 @@ internal sealed partial class ShellWindow : Window
         "NEEDS_AUTH" or "OFFLINE"=>new SolidColorBrush(Color.Parse("#C18B32")),
         _=>Secondary
     };
-    // The same three-period statistics table is used by every cloud/computer
-    // card, both in Status and on the management pages. Rendering is local only.
-    private Control UsageRows(Func<string,V2OperationTotals> totalsForPeriod)
+    // One shared four-period table serves every cloud/computer card, including
+    // Status and the management pages. Rendering is local only.
+    internal Control UsageRows(Func<string,V2OperationTotals> totalsForPeriod)
     {
-        // Five fully visible columns fit the narrower 350-DIP card with
-        // unchanged 11-DIP typography. The upload column uses the spare space.
-        var grid=new Grid{ColumnDefinitions=new ColumnDefinitions("52,57,52,66,*"),
+        // Five columns must also fit the longer localized Today label.
+        var grid=new Grid{Name="UsagePeriodGrid",
+            ColumnDefinitions=new ColumnDefinitions("59,57,52,66,*"),
             ColumnSpacing=4,RowSpacing=4};
-        for(var i=0;i<4;i++)grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+        for(var i=0;i<5;i++)grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
         string[] labels=["Период","Чтение","Запись","Скачано","Загружено"];
         for(var col=0;col<labels.Length;col++)
         {
-            var caption=Text(labels[col],11);
+            var caption=Text(UiLang.T(labels[col]),11);
             caption.TextWrapping=TextWrapping.NoWrap;
             Grid.SetColumn(caption,col);grid.Children.Add(caption);
         }
-        var periods=new[]{("Неделя","week"),("Месяц","month"),("Всего","all")};
+        var periods=new[]{("Сегодня","today"),("Неделя","week"),("Месяц","month"),("Всего","all")};
         for(var row=0;row<periods.Length;row++)
         {
             if(row%2==0)
@@ -135,7 +135,7 @@ internal sealed partial class ShellWindow : Window
             }
             var period=periods[row];
             var t=totalsForPeriod(period.Item2);
-            var values=new[]{period.Item1,
+            var values=new[]{UiLang.T(period.Item1),
                 (t.Get+t.Probe+t.List).ToString("N0"),
                 (t.Put+t.Mkdir+t.Delete).ToString("N0"),
                 FormatBytes(t.DownloadBytes),FormatBytes(t.UploadBytes)};
@@ -1064,7 +1064,8 @@ internal sealed partial class ShellWindow : Window
             string address;
             try
             {
-                address=await CloudStoreFactory.LoginGoogleAsync(cfg,option,CancellationToken.None);
+                address=await CloudStoreFactory.LoginGoogleAsync(
+                    cfg,option,UiLang.Active,Dark,CancellationToken.None);
             }
             finally{engine.Gate.Release();}
             cloud.Account=address;

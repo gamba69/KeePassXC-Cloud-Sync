@@ -74,11 +74,18 @@ internal static class CloudStoreFactory
         catch(CloudSafetyException e){throw Convert(e);}
     }
 
-    internal static async Task<string> LoginGoogleAsync(AppOptions settings,CloudOptions cloud,CancellationToken ct)
+    internal static async Task<string> LoginGoogleAsync(AppOptions settings,CloudOptions cloud,
+        string language,bool darkTheme,CancellationToken ct)
     {
         var options=Options(settings,cloud);
         using var http=new HttpClient{Timeout=options.Timeout};
-        try{return await new GoogleOAuthSession(options,Services(),http).LoginAsync(ct);}
+        // The package owns the loopback listener, OAuth state, token exchange and
+        // response headers. The host supplies only its static result-page markup.
+        var services=Services() with
+        {
+            GoogleOAuthCallbackPages=GoogleOAuthCallbackPage.Create(language,darkTheme)
+        };
+        try{return await new GoogleOAuthSession(options,services,http).LoginAsync(ct);}
         catch(PackageException e){throw Convert(e);}
         catch(CloudSafetyException e){throw Convert(e);}
     }
@@ -225,7 +232,7 @@ internal class CloudStoreAdapter(ICloudTransport transport):IRemoteStore
             return;
         }
         if(Transport.Provider==CloudProvider.ProtonDrive)
-            throw new NotSupportedException("KeePassXC.CloudTransport 1.0.2 cannot trash a Proton test folder; isolated cleanup requires a package API extension");
+            throw new NotSupportedException("CloudTransport does not expose verified recursive Proton test-folder cleanup");
         // Google Drive and WebDAV delete an isolated directory recursively.
         await DeleteAsync(directory,ct);
     }

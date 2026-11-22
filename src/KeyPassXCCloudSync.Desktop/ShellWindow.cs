@@ -773,7 +773,15 @@ internal sealed partial class ShellWindow : Window
         _diagnosticsProgress=null;
         _diagnosticsActions=[];
         if(_page!=5)CancelProtectedDataScan();
+        // These controls are owned by the currently visible page, never by a
+        // detached page after navigating between About and Settings.
         _updateStatus=null;
+        _checkUpdatesButton=null;
+        _installUpdateButton=null;
+        _repairUpdateButton=null;
+        _protonUpdateStatus=null;
+        _checkProtonButton=null;
+        _installProtonButton=null;
         _pageContent.Content=_page switch
         {
             0=>BuildOverview(),1=>BuildClouds(),2=>BuildComputers(),3=>BuildSettings(),4=>BuildDiagnostics(),5=>BuildHistory(),_=>BuildAbout()
